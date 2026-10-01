@@ -1,0 +1,218 @@
+name: release
+
+# Publishes a release when a version tag is pushed, and never otherwise:
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# The disk image is built, signed with the Developer ID and the hardened runtime, notarised and
+# stapled; then it is checked the way a person's Mac will check it, published as a draft with a
+# signed checksum list, downloaded again and checked against that list, and only then made visible.
+# Each check exists because skipping it once shipped something broken elsewhere; docs/releasing.md
+# says which.
+#
+# Secrets (names only; their values never appear here or in a log):
+#   MACOS_CERT_P12        the Developer ID Application certificate, a .p12, base64
+#   MACOS_CERT_PASSWORD   its password
+#   NOTARY_KEY_P8         an App Store Connect API key for notarisation, the .p8 file's contents
+#   NOTARY_KEY_ID         that key's id
+#   NOTARY_ISSUER_ID      that key's issuer id
+#   RELEASE_SIGNING_KEY   the Ed25519 private key whose public half is src/download/release-key.ts
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # macOS, because codesign, notarytool, stapler and spctl run nowhere else.
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      APP_NAME: Bearing Diligence
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      # FIRST, and readable. A missing secret otherwise surfaces twenty minutes in as a signing tool's
+      # error about something else, or not at all: a release with no notes, or one signed by a key no
+      # installed copy trusts, looks entirely normal.
+      - name: Preflight
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for s in MACOS_CERT_P12 MACOS_CERT_PASSWORD NOTARY_KEY_P8 NOTARY_KEY_ID NOTARY_ISSUER_ID RELEASE_SIGNING_KEY; do
+            if [ -z "${!s:-}" ]; then echo "::error::The repository secret $s is not set (see docs/releasing.md)."; missing=1; fi
+          done
+          [ "$missing" = 0 ] || exit 1
+
+          version="${TAG#v}"
+          pkg=$(node -p 'require("./package.json").version')
+          if [ "$pkg" != "$version" ]; then
+            echo "::error::The tag says $version and package.json says $pkg. Bump package.json, commit, and tag that commit."
+            exit 1
+          fi
+
+          # The release notes are this version's section of CHANGELOG.md, and it must be dated.
+          awk -v v="$version" '
+            $0 ~ "^## " { if (on) exit; if (index($0, "## " v ",") == 1 || $0 == "## " v) { on = 1; head = $0; next } }
+            on { print }
+            END { if (head ~ /unreleased/) exit 2 }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md" || {
+            echo "::error::CHANGELOG.md's section for $version still says unreleased. Date it before tagging."
+            exit 1
+          }
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no section for $version, so this release would have no notes."
+            exit 1
+          fi
+
+          # The private release key must be the one compiled into the app, or every installed copy
+          # refuses this release.
+          node scripts/release-sign.mjs check
+
+      - run: npm ci
+
+      - name: Tests and gates
+        env:
+          SKIPS_OK: "1"
+        run: npm test && npm run gates
+
+      - name: Notarisation key file
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          umask 077
+          printf '%s\n' "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+
+      # electron-builder imports the certificate into a temporary keychain of its own and deletes it
+      # when it finishes, signs every binary in the bundle with the hardened runtime and a timestamp,
+      # notarises the app and staples it.
+      - name: Build, sign and notarise the app
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          export APPLE_API_KEY="$RUNNER_TEMP/notary.p8"
+          npm run build
+          npx electron-builder --mac --arm64 --publish never -c.mac.notarize=true
+
+      - name: Notarise and staple the disk image
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          dmg="release/Bearing-Diligence-${TAG#v}-arm64.dmg"
+          [ -f "$dmg" ] || { echo "::error::no $dmg"; ls -la release; exit 1; }
+          xcrun notarytool submit "$dmg" --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
+          xcrun stapler staple "$dmg"
+
+      # A signing step can do nothing and report success; elsewhere that shipped an unsigned release.
+      # So the signature is read back from what was built.
+      - name: Prove what was signed
+        run: |
+          set -euo pipefail
+          app="release/mac-arm64/$APP_NAME.app"
+          info=$(codesign -dv --verbose=2 "$app" 2>&1)
+          echo "$info"
+          echo "$info" | grep -q "^Authority=Developer ID Application" || { echo "::error::not signed with a Developer ID"; exit 1; }
+          echo "$info" | grep -q "flags=0x10000(runtime)" || { echo "::error::signed without the hardened runtime"; exit 1; }
+          echo "$info" | grep -q "^TeamIdentifier=[A-Z0-9]\{10\}$" || { echo "::error::no Apple team on the signature"; exit 1; }
+          codesign --verify --strict --deep --verbose=2 "$app"
+
+      # The way a person's Mac will check it. Gatekeeper is ASKED (spctl), and the launch is a separate
+      # check with the download mark cleared: launching a quarantined app waits on a dialog nobody on a
+      # runner can click, which hung a runner for 35 minutes elsewhere.
+      - name: Check it the way a Mac will
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          dmg="release/Bearing-Diligence-$version-arm64.dmg"
+          codesign --verify --strict "$dmg"
+          xcrun stapler validate "$dmg"
+          spctl --assess --type open --context context:primary-signature -vv "$dmg" 2>&1 | tee /dev/stderr | grep -q accepted
+
+          mount=$(mktemp -d)
+          hdiutil attach "$dmg" -nobrowse -readonly -noautoopen -mountpoint "$mount"
+          trap 'hdiutil detach "$mount" -quiet || true' EXIT
+          app="$mount/$APP_NAME.app"
+          [ -d "$app" ] || { echo "::error::no app inside the disk image"; ls -la "$mount"; exit 1; }
+          [ -L "$mount/Applications" ] || { echo "::error::no Applications link in the disk image"; exit 1; }
+          xcrun stapler validate "$app"
+          lipo -archs "$app/Contents/MacOS/$APP_NAME" | grep -qx arm64
+
+          copy="$RUNNER_TEMP/check/$APP_NAME.app"
+          rm -rf "$RUNNER_TEMP/check"; mkdir -p "$RUNNER_TEMP/check"
+          ditto "$app" "$copy"
+          xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;$(uuidgen)" "$copy"
+          spctl --assess --type execute -vv "$copy" 2>&1 | tee /dev/stderr | grep -q accepted
+          xattr -d com.apple.quarantine "$copy"
+
+          said=$("$copy/Contents/MacOS/$APP_NAME" --version-probe)
+          [ "$said" = "$version" ] || { echo "::error::the app says it is version '$said', the tag says $version"; exit 1; }
+
+          open -n "$copy"
+          sleep 15
+          pgrep -f "$copy/Contents/MacOS/$APP_NAME" >/dev/null || { echo "::error::the app did not stay running after launch"; exit 1; }
+          pkill -f "$copy/Contents/MacOS/" || true
+          echo "Gatekeeper accepts the disk image and the downloaded app, and the app runs as $version"
+
+      # Draft first; the checksum list is written over the final files and signed LAST; every file is
+      # downloaded again and checked before the release is visible, because a release elsewhere went
+      # public missing a file.
+      - name: Publish as a draft, sign the checksums, verify, then publish
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          name="Bearing-Diligence-$version-arm64.dmg"
+          pre=""; case "$version" in *-*) pre="--prerelease";; esac
+
+          out="$RUNNER_TEMP/out"; rm -rf "$out"; mkdir -p "$out"
+          cp "release/$name" "$out/"
+          (cd "$out" && shasum -a 256 "$name" > checksums.txt)
+          node scripts/release-sign.mjs sign "$out/checksums.txt"
+          node scripts/release-sign.mjs verify "$out/checksums.txt" "$out/checksums.txt.sig"
+
+          gh release create "$TAG" --draft $pre --title "Bearing Diligence $version" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            "$out/$name" "$out/checksums.txt" "$out/checksums.txt.sig"
+
+          back="$RUNNER_TEMP/back"; rm -rf "$back"; mkdir -p "$back"
+          gh release download "$TAG" -D "$back"
+          [ "$(ls "$back" | wc -l | tr -d ' ')" = 3 ] || { echo "::error::the draft does not hold exactly its three files"; ls -la "$back"; exit 1; }
+          (cd "$back" && shasum -a 256 -c checksums.txt)
+          node scripts/release-sign.mjs verify "$back/checksums.txt" "$back/checksums.txt.sig"
+
+          gh release edit "$TAG" --draft=false
+          echo "published $TAG"
+
+      - name: Remove the notarisation key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/notary.p8"

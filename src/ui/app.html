@@ -1510,9 +1510,52 @@
   async function checkUpdates() {
     $("updateResult").innerHTML = "<span class='empty'>asking GitHub…</span>";
     try {
-      $("updateResult").innerHTML = updateBlock(await api.checkForUpdates());
+      const r = await api.checkForUpdates();
+      $("updateResult").innerHTML = updateBlock(r) + (r.state === "newer" ? await installControls(r) : "");
+      $("installUpdate")?.addEventListener("click", installNow);
     } catch (e) {
       $("updateResult").innerHTML = `<div class="sentence dropped"><div class="why">${esc(e.message)}</div></div>`;
+    }
+  }
+
+  /**
+   * Install is offered only where it can work: a signed copy, outside its disk image, in a folder
+   * this account can write. Anywhere else the panel says why, and the release page is the way.
+   */
+  async function installControls(r) {
+    let can;
+    try {
+      can = (await api.updateSettings()).install;
+    } catch {
+      can = { ok: false, why: "A browser cannot install updates; use the app." };
+    }
+    if (!can || !can.ok) return `<div class="note">${esc(can?.why ?? "This copy cannot install updates.")}</div>`;
+    return `<div class="actions after"><button type="button" id="installUpdate">Install version ${esc(r.latest)}</button></div>
+      <div id="installResult"></div>
+      <div class="note">Install downloads the release, checks its signature, its checksum and Apple's
+        signature, and only then replaces this app. Your folders and records are not touched.</div>`;
+  }
+
+  async function installNow() {
+    const btn = $("installUpdate");
+    btn.disabled = true;
+    btn.textContent = "Downloading and checking…";
+    let r;
+    try {
+      r = await api.installUpdate();
+    } catch (e) {
+      r = { state: "refused", why: e.message };
+    }
+    if (r.state === "ready") {
+      btn.hidden = true;
+      $("installResult").innerHTML = `<div class="sentence kept"><div>${esc(r.says)}</div></div>
+        <div class="actions after"><button type="button" id="restartApp">Restart</button></div>`;
+      $("restartApp").addEventListener("click", () => api.restartApp());
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Try again";
+      $("installResult").innerHTML = `<div class="sentence dropped"><div class="why">${esc(r.why)}</div>
+        ${r.page ? `<div class="cite">${esc(r.page)}</div>` : ""}</div>`;
     }
   }
 
@@ -1658,7 +1701,7 @@
     <div class="note">A check asks GitHub for the latest published release of this app. It sends nothing
       about you: no version, no identifier and nothing from your record. GitHub sees this computer's
       address and a fixed name for the app, as with any web request. Nothing is ever downloaded
-      by a check.</div>`;
+      by a check; only Install downloads, and only when you press it.</div>`;
   /** Light, dark, or the Mac's own; the shell applies it to every window at once. */
   async function showAppearance(pick) {
     let a;

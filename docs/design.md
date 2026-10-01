@@ -18,7 +18,7 @@ Each is a property the code keeps and a check holds it to. Code comments cite th
 | 4 | **The person authors the judgments; the machine retrieves and applies.** Nothing labels a vote wrong or a person dishonest | The answer prompt and a fixture of leading questions |
 | 5 | **No silent escalation.** Nothing falls back from a local model to a hosted one or back | `src/harness/choose.ts` hands the answer path one asker; tests cover each failure on each side |
 | 6 | **Retention is the person's.** No part of a question is written to disk unless that conversation is saved, or saving is switched on for that folder, and then only in that folder's own record; deleting compacts the file | `test/retention.test.ts` and the shell smoke read every byte the app wrote, after asking, write-ahead log included |
-| 7 | **No telemetry.** Updates are checked only when you ask, or at launch if you switch that on, and the check sends nothing about you | The update check is its own module (`src/download/update.ts`) with a test of exactly what it sends |
+| 7 | **No telemetry.** Updates are checked only when you ask, or at launch if you switch that on, and the check sends nothing about you. An update is installed only when you press Install, and only after its signature, its checksum, Apple's signature and its version have verified | The update check is its own module (`src/download/update.ts`) with a test of exactly what it sends; the install (`src/download/install.ts`) has a test for each refusal, each leaving the running app untouched, and the deletion pass removes each check and requires a test to notice |
 | 8 | **The record lives in a folder you chose and confirmed**, and you are told when that folder syncs or sits in a git repository | `src/util/paths.ts` refuses an unconfirmed location and names what it checked and what it cannot see |
 | 9 | **Documents are data, never instructions.** Text that reads as an instruction to a machine, or that a reader cannot see, is marked, and a mark changes nothing about retrieval or ranking | `src/screen/` reads hidden text from the PDF's drawing operators; a gate fails the build if retrieval or ranking reads the marks |
 | 10 | **The model that reads a document has no tools**, and nothing offered to a model can reach the network or the shell | `toolsOffered()` in `src/harness/model.ts`, read by a gate |
@@ -52,7 +52,8 @@ quote the same pair of passages are shown as one comparison with every differing
 - **Model downloads**, once, each verified against the digest the manifest pins
   (`src/download/manifest.json`, `src/download/pull.ts`). `npm run models -- --pull` fetches only what
   this machine needs.
-- **An update check**, only when asked.
+- **An update check**, only when asked, and **an update's download**, only when Install is pressed:
+  the release's disk image and its signed checksum list, from this repository's Releases page.
 - **A hosted answer**, only in a folder whose owner chose the cloud in Settings, after a confirmation
   that says what leaves: the question, up to two earlier turns and the passages found for it, to
   OpenRouter, asking for no data collection and zero data retention (the vendor's claims, which this

@@ -34,3 +34,4 @@ __pycache__/
 # Secrets: a local key for tools/compare-models.mjs. Never committed.
 .env
 .env.*
+/release/

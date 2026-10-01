@@ -38,3 +38,4 @@ export function launchCheck(
 }
 
 export { checkForUpdate, type UpdateCheck };
+export { bundleOf, clearLeftovers, installable, installUpdate, type Run } from "../download/install.js";

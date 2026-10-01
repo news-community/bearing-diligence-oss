@@ -101,18 +101,21 @@ test("reading a document twice replaces the votes rather than doubling them", as
 
 test("a page with no text layer is reported, and is NOT silently treated as empty", async () => {
   // OCR has no switch, so the one way a page stays unread is the real one: no engine on this
-  // machine. PATH is emptied for this test so `ocrEngine()` finds none, whatever is installed.
+  // machine. PATH is emptied, and the search limited to it, so `ocrEngine()` finds none, whatever
+  // is installed.
   const { dir, rec } = fresh("pr-intake4-");
   const f = join(dir, "scan.pdf");
   writeFileSync(f, await makeScannedPdf(["Item 4.1 Resolution 2026-07", "The motion carried 5-2."]));
 
   const path = process.env.PATH;
   process.env.PATH = "";
+  process.env.BD_TOOLS_PATH_ONLY = "1";
   let out;
   try {
     out = await intake(rec, f, { layer: "public" });
   } finally {
     process.env.PATH = path;
+    delete process.env.BD_TOOLS_PATH_ONLY;
   }
   assert.equal(out.added.pages_with_text, 0);
   assert.equal(out.ocr?.ran, false, "no engine, so nothing claims to have read it");

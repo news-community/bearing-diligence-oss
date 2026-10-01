@@ -26,21 +26,67 @@
     "deletion-pass": "npm run build && ELECTRON_RUN_AS_NODE=1 electron scripts/deletion-pass.mjs",
     "watch-calls": "npm run build && ELECTRON_RUN_AS_NODE=1 electron tools/watch-calls.mjs",
     "models": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/src/cli/models.js",
-    "counts": "python3 scripts/checks.py --write-counts"
+    "counts": "python3 scripts/checks.py --write-counts",
+    "dist": "npm run build && electron-builder --mac --arm64 --publish never"
   },
   "dependencies": {
-    "@fontsource-variable/geist": "5.3.0",
-    "@fontsource-variable/newsreader": "5.3.0",
     "@napi-rs/canvas": "0.1.100",
-    "@types/better-sqlite3": "9.6.0",
-    "@types/node": "24.19.0",
     "better-sqlite3": "13.0.3",
-    "pdfjs-dist": "4.10.38",
-    "typescript": "5.9.2"
+    "pdfjs-dist": "4.10.38"
   },
   "devDependencies": {
     "@electron/rebuild": "4.2.0",
-    "electron": "44.4.5"
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/newsreader": "5.3.0",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.19.0",
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
+    "typescript": "5.9.2"
   },
-  "main": "dist/app/main.js"
+  "main": "dist/app/main.js",
+  "build": {
+    "appId": "news.communities.bearing-diligence",
+    "productName": "Bearing Diligence",
+    "copyright": "Copyright 2026 Communities News LLC",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/app/**",
+      "dist/src/**",
+      "!dist/src/gates/**",
+      "!dist/src/cli/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "npmRebuild": true,
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "app/icon/bear-app-icon-1024.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "minimumSystemVersion": "12.0",
+      "notarize": false
+    },
+    "dmg": {
+      "sign": true,
+      "artifactName": "Bearing-Diligence-${version}-arm64.${ext}",
+      "writeUpdateInfo": false
+    },
+    "publish": null
+  }
 }

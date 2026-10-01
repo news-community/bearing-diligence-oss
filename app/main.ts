@@ -11,19 +11,65 @@
  * remote content.
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, shell } from "electron";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LocationRefused, openRecord, type Record as OpenRecord } from "../src/record/db.js";
 import { NAMES, NoRecord, runnerFor, type Ctx, type ShellOnlyName } from "../src/ui/api.js";
 import { chooseRecord, forgetFolder, recentFolders, rememberedRecord, rememberRecord } from "../src/ui/choose.js";
 import { dataDirFor, fileIn, listFolder, readFolder } from "../src/ui/folder.js";
-import { checkForUpdate, isAppearance, launchCheck, readSettings, writeSettings, type UpdateCheck } from "../src/ui/updates.js";
+import {
+  bundleOf,
+  checkForUpdate,
+  clearLeftovers,
+  installable,
+  installUpdate,
+  isAppearance,
+  launchCheck,
+  readSettings,
+  writeSettings,
+  type Run,
+  type UpdateCheck,
+} from "../src/ui/updates.js";
 import { createIntakeQueue } from "../src/ingest/queue.js";
 import { GENERAL_MODEL } from "../src/harness/model.js";
 import { stopRuntime } from "../src/harness/runtime.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * `--version-probe` prints the version and exits before anything opens: how the release workflow
+ * and the installer ask a new copy what it is without launching it for a person.
+ */
+const PROBE = process.argv.includes("--version-probe");
+if (PROBE) {
+  process.stdout.write(app.getVersion() + "\n");
+  app.exit(0);
+}
+
+/** The bundle this copy runs from, when it is a packaged app; null when run from source. */
+const BUNDLE = app.isPackaged ? bundleOf(process.execPath) : null;
+
+/** A command's exit code and output, whether it succeeded or not. */
+const run: Run = (cmd, args) =>
+  new Promise((resolve) => {
+    execFile(cmd, args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const code = err ? (typeof (err as any).code === "number" ? (err as any).code : 1) : 0;
+      resolve({ code, stdout: String(stdout), stderr: String(stderr) || (err && !stderr ? err.message : "") });
+    });
+  });
+
+const canWrite = (dir: string) => {
+  try {
+    rmSync(mkdtempSync(join(dir, ".bearing-diligence-probe-")), { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const canInstall = () => installable({ packaged: app.isPackaged, platform: process.platform, bundle: BUNDLE, canWrite });
 
 // The shell's browser profile is Electron's own default, ~/Library/Application Support/Bearing
 // Diligence, named from `productName` in package.json. A record's data lives in the folder the person opens.
@@ -207,7 +253,20 @@ const SHELL: Record<ShellOnlyName, (...args: any[]) => unknown> = {
     const profile = app.getPath("userData");
     if (typeof checkAtLaunch === "boolean") writeSettings(profile, { checkAtLaunch });
     const s = readSettings(profile);
-    return { checkAtLaunch: s.checkAtLaunch, atLaunch: atLaunch ? await atLaunch : null };
+    return { checkAtLaunch: s.checkAtLaunch, atLaunch: atLaunch ? await atLaunch : null, install: canInstall() };
+  },
+  /** Only when Install is pressed, and only where it can work: see src/download/install.ts. */
+  installUpdate: async () => {
+    const can = canInstall();
+    if (!can.ok) return { state: "refused", why: can.why };
+    return installUpdate(app.getVersion(), BUNDLE!, { fetch, run });
+  },
+  /** After an update is in place: start the new copy. Only when Restart is pressed. */
+  restartApp: () => {
+    stopRuntime();
+    app.relaunch();
+    app.exit(0);
+    return { ok: true };
   },
 };
 
@@ -309,7 +368,33 @@ function refreshAll(): void {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("menu", "refresh");
 }
 
-app.whenReady().then(() => {
+/**
+ * Opened straight from its disk image, the app offers to move itself to Applications. Left there it
+ * can never be updated, because nothing on a read-only disk image can be replaced.
+ */
+async function offerMoveToApplications(): Promise<void> {
+  if (!BUNDLE || process.platform !== "darwin" || app.isInApplicationsFolder()) return;
+  if (!BUNDLE.startsWith("/Volumes/") && !BUNDLE.includes("/AppTranslocation/")) return;
+  const r = await dialog.showMessageBox({
+    type: "question",
+    buttons: ["Move to Applications", "Not Now"],
+    defaultId: 0,
+    cancelId: 1,
+    message: "Move Bearing Diligence to your Applications folder?",
+    detail: "It is running from its disk image, where it cannot be updated.",
+  });
+  if (r.response === 0) {
+    try {
+      app.moveToApplicationsFolder();
+    } catch (e) {
+      dialog.showErrorBox("Bearing Diligence was not moved", (e as Error).message);
+    }
+  }
+}
+
+if (!PROBE) app.whenReady().then(async () => {
+  if (BUNDLE && !BUNDLE.startsWith("/Volumes/")) clearLeftovers(BUNDLE);
+  await offerMoveToApplications();
   // In development the Dock shows Electron's own icon unless told otherwise; a signed build carries
   // the .icns instead (M6).
   if (process.platform === "darwin") app.dock?.setIcon(join(HERE, "icon", "bear-app-icon-1024.png"));

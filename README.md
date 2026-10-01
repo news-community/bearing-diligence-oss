@@ -68,6 +68,8 @@ npm run check    # tests, code gates, document checks, the proof each can fail, 
 - [docs/STATUS.md](docs/STATUS.md): what runs and what does not.
 - [docs/models.md](docs/models.md): how models are judged, and the results.
 - [docs/egress-test.md](docs/egress-test.md): how an outsider can check that nothing leaves.
+- [docs/releasing.md](docs/releasing.md): how a release is built, signed and checked, and how the
+  app updates itself.
 - [CONTRIBUTING.md](CONTRIBUTING.md) and [CLAUDE.md](CLAUDE.md): how to work on it.
 
 ## License

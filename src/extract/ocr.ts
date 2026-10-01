@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Record as OpenRecord } from "../record/db.js";
+import { findTool } from "../util/tools.js";
 
 export type OcrOutcome = {
   engine: string;
@@ -29,11 +30,14 @@ export type OcrOutcome = {
   note: string;
 };
 
+/** The engine's path, wherever it was installed; the bare name when it is nowhere, so the call fails as "not installed". */
+const tesseract = () => findTool("tesseract")?.path ?? "tesseract";
+
 /** Which engine is here, if any. An engine that is absent is said, never assumed. */
 export function ocrEngine(): { available: boolean; version: string; languages: string[]; note: string } {
   try {
-    const version = String(execFileSync("tesseract", ["--version"], { encoding: "utf8" })).split("\n")[0]!.trim();
-    const langs = String(execFileSync("tesseract", ["--list-langs"], { encoding: "utf8" }))
+    const version = String(execFileSync(tesseract(), ["--version"], { encoding: "utf8" })).split("\n")[0]!.trim();
+    const langs = String(execFileSync(tesseract(), ["--list-langs"], { encoding: "utf8" }))
       .split("\n")
       .slice(1)
       .map((l) => l.trim())
@@ -141,7 +145,7 @@ export async function ocrDocument(
         const png = await renderPage(opened.doc, opened.canvasMod, page_no, scale);
         const image = join(work, `p${page_no}.png`);
         writeFileSync(image, png);
-        text = String(execFileSync("tesseract", [image, "stdout", "--psm", "1"], { encoding: "utf8" })).trim();
+        text = String(execFileSync(tesseract(), [image, "stdout", "--psm", "1"], { encoding: "utf8" })).trim();
       } catch (e) {
         // A break is not a finding. Rendering failing, the canvas being absent, tesseract crashing
         // and a page genuinely carrying no readable text all used to arrive as the same sentence:

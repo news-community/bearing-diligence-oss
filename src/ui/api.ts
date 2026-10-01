@@ -382,6 +382,12 @@ export const API = {
   updateSettings: {
     shellOnly: "Update settings live in the desktop application's own profile, which a browser does not have.",
   },
+  installUpdate: {
+    shellOnly: "A browser cannot replace the desktop application; install updates from the app itself.",
+  },
+  restartApp: {
+    shellOnly: "A browser has no application to restart.",
+  },
   openSettings: {
     shellOnly: "A browser has no second window; Settings opens in this page instead.",
   },

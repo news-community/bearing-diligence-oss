@@ -349,6 +349,42 @@ const GUARDS = [
     find: "    rec.db.prepare(\"DELETE FROM votes WHERE document_id = ?\").run(documentId);",
     with: "    void documentId;",
   },
+  {
+    name: "an update's checksum list must carry the release key's signature",
+    file: "src/download/install.ts",
+    find: "    if (!verifyChecksums(list, signature, key)) {",
+    with: "    if (false) {",
+  },
+  {
+    name: "an update's disk image must match its signed checksum",
+    file: "src/download/install.ts",
+    find: "    if (got !== want) return refuse(",
+    with: "    if (false) return refuse(",
+  },
+  {
+    name: "an update must be signed by the running app's Apple team",
+    file: "src/download/install.ts",
+    find: "    if (theirs !== ours) return refuse(",
+    with: "    if (false) return refuse(",
+  },
+  {
+    name: "an update must be newer than the running app",
+    file: "src/download/install.ts",
+    find: "    if (cmp >= 0) return refuse(",
+    with: "    if (false) return refuse(",
+  },
+  {
+    name: "a failed swap puts the old app back",
+    file: "src/download/install.ts",
+    find: "      rename(previous, bundle);\n      return refuse(",
+    with: "      return refuse(",
+  },
+  {
+    name: "Install is not offered from a disk image",
+    file: "src/download/install.ts",
+    find: 'if (a.bundle.startsWith("/Volumes/") || a.bundle.includes("/AppTranslocation/")) {',
+    with: "if (false) {",
+  },
 ];
 
 const only = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1] : null;

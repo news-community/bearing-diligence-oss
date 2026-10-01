@@ -7,6 +7,7 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { findTool } from "../util/tools.js";
 
 /** Pinned in code. 1948 is chosen to stay clear of the runtime's own default port, 11434, and of anything else on the machine. */
 export const RUNTIME_HOST = "127.0.0.1";
@@ -66,7 +67,11 @@ export async function isUp(timeoutMs = 1500): Promise<boolean> {
 
 export async function startRuntime(modelsDir = join(homedir(), ".ollama", "models")): Promise<"already" | "started"> {
   if (await isUp()) return "already";
-  child = spawn("ollama", ["serve"], {
+  const ollama = findTool("ollama");
+  if (!ollama) {
+    throw new Error("Ollama is not installed on this Mac. Install it from ollama.com/download, open it once, and try again.");
+  }
+  child = spawn(ollama.path, ["serve"], {
     env: { ...process.env, OLLAMA_HOST: `${RUNTIME_HOST}:${RUNTIME_PORT}`, OLLAMA_MODELS: modelsDir },
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,
@@ -78,7 +83,7 @@ export async function startRuntime(modelsDir = join(homedir(), ".ollama", "model
   let spawnFailure = "";
   child.on("error", (e) => {
     spawnFailure = (e as NodeJS.ErrnoException).code === "ENOENT"
-      ? "no `ollama` on PATH. In a packaged application PATH is the system one, so a runtime installed for your shell is not visible to it."
+      ? `${ollama.path} could not be run, although it was found (${ollama.where}).`
       : `the runtime could not be started: ${e.message}`;
   });
   for (let i = 0; i < 30; i++) {
