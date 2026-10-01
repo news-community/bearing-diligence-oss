@@ -3,8 +3,8 @@ name: ci
 # Every push to main and every pull request: the tests, the gates over the code, the document checks,
 # the proof that each of those can fail, and the app itself driven through its real window.
 #
-# A runner has no model runtime and no OCR engine, so the tests that need them report "did not run"
-# by name, as they do on any machine without them. SKIPS_OK=1 says that is expected here; it does not
+# A runner has no model runtime, so the tests that need one report "did not run" by name, as they do
+# on any machine without it. The OCR engine is installed, so the scanned-page tests do run. SKIPS_OK=1 says that is expected here; it does not
 # hide them, and the log lists every one.
 
 on:
@@ -33,6 +33,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: OCR engine, for the scanned-page tests
+        run: brew install tesseract
       - name: Tests
         run: npm test
       - name: Gates over the code, and the proof each fires
