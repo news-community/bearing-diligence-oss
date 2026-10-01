@@ -23,7 +23,7 @@ const release = (tag: string) => ({
   tag_name: tag,
   published_at: "2026-10-01T12:00:00Z",
   body: "What changed",
-  html_url: "https://github.com/news-community/bearing-diligence/releases/tag/" + tag,
+  html_url: "https://github.com/news-community/bearing-diligence-oss/releases/tag/" + tag,
 });
 
 test("versions compare as semantic versions, and anything else cannot be compared", () => {

@@ -7,7 +7,7 @@
  * nothing from the record. GitHub sees what any web request shows, this computer's address and that
  * user agent, and the "This record" panel says so in those words.
  */
-export const RELEASES_URL = "https://api.github.com/repos/news-community/bearing-diligence/releases/latest";
+export const RELEASES_URL = "https://api.github.com/repos/news-community/bearing-diligence-oss/releases/latest";
 export const USER_AGENT = "Bearing-Diligence-update-check";
 
 export type UpdateCheck = {
