@@ -1,0 +1,84 @@
+{
+ "note": "The bodies of the files --prove plants, kept as DATA for the same reason as hosted-providers.json: written into run.ts they would be exactly what the forbidden-reference gate looks for, and the runner would fail on its own failing cases.",
+ "forbidden reference": [
+  {
+   "path": "src/record/leak.ts",
+   "body": "import https from 'node:https';\nconst u = 'https://example.org/x';\nexport { https, u };\n"
+  },
+  {
+   "path": "src/cloud/elsewhere.ts",
+   "body": "export const U = 'https://example.org/v1';\n"
+  }
+ ],
+ "no fallback": [
+  {
+   "path": "src/harness/oops.ts",
+   "body": "export const FALLBACK = 'api.anthropic.com';\n"
+  },
+  {
+   "path": "src/cloud/oops.ts",
+   "body": "export const OTHER = 'api.openai.com';\n"
+  }
+ ],
+ "loopback pinned": {
+  "path": "src/harness/override.ts",
+  "body": "export const HOST = process.env.MODEL_HOST ?? '127.0.0.1';\n"
+ },
+ "download isolated": {
+  "path": "src/record/oops.ts",
+  "body": "import { pull } from '../download/pull.js';\nexport { pull };\n"
+ },
+ "one way in": {
+  "path": "src/record/shortcut.ts",
+  "body": "import { addDocument } from './store.js';\nexport { addDocument };\n"
+ },
+ "a mark changes nothing": {
+  "path": "src/answer/rank.ts",
+  "body": "export const SQL = 'SELECT 1 FROM marks WHERE document_id = ?';\n"
+ },
+ "one table behind both bridges": [
+  {
+   "path": "app/preload.cjs",
+   "body": "const { contextBridge } = require('electron');\ncontextBridge.exposeInMainWorld('record', {\n  state: () => null,\n});\n"
+  },
+  {
+   "path": "tools/ui-dev/serve.ts",
+   "find": "window.record = Object.fromEntries(",
+   "with": "window.record = {\n  state: () => null,\n};\nwindow.fromTable = Object.fromEntries("
+  },
+  {
+   "path": "app/preload.cjs",
+   "find": "ipcRenderer.on(\"menu\"",
+   "with": "ipcRenderer.on(\"files\""
+  }
+ ],
+ "the page calls what the table offers": {
+  "path": "src/ui/api.ts",
+  "body": "export const API = {\n  state: { run: () => null },\n  neverCalled: { run: () => null },\n} satisfies Record<string, unknown>;\n"
+ },
+ "every colour pair clears its floor": [
+  {
+   "path": "src/ui/app.html",
+   "find": "--quiet: #a9b8c9;",
+   "with": "--quiet: #3a4a5c;"
+  },
+  {
+   "path": "src/ui/app.html",
+   "find": "  .brief { white-space: pre-wrap; font-size: 14.5px; line-height: 1.55; background: var(--surface);",
+   "with": "  .brief { white-space: pre-wrap; font-size: 14.5px; line-height: 1.55; background: #ffffff;"
+  },
+  {
+   "path": "src/ui/app.html",
+   "find": "  .ref.read-right { border-left-color: var(--rule); }",
+   "with": "  .ref.read-right { border-left-color: var(--rule); opacity: .62; }"
+  }
+ ],
+ "the application never imports the harness": {
+  "path": "src/answer/consult.ts",
+  "body": "import { receiptRelations } from '../../test/probes.js';\nexport { receiptRelations };\n"
+ },
+ "cloud isolated": {
+  "path": "src/ingest/cheat.ts",
+  "body": "import { askCloud } from '../cloud/openrouter.js';\nexport { askCloud };\n"
+ }
+}

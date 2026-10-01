@@ -1,0 +1,36 @@
+# Invariant 8 at the repository boundary: board material never enters git, public or private.
+# Deny by default under fixtures/, because a fixture is a document and its label is not.
+fixtures/*
+!fixtures/**/
+!fixtures/**/*.md
+!fixtures/**/*.json
+
+# And nowhere else either, whatever it is called.
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.mp3
+*.wav
+*.m4a
+*.mp4
+*.mov
+*.eml
+*.msg
+
+# The application's own working directories, which must never be inside this tree anyway.
+/data/
+/.store/
+node_modules/
+__pycache__/
+
+# Build output and dependencies
+/dist/
+/node_modules/
+
+# Secrets: a local key for tools/compare-models.mjs. Never committed.
+.env
+.env.*

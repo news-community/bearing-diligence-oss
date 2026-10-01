@@ -1,0 +1,18 @@
+{
+ "note": "Hosted model providers, kept as DATA rather than as source. Written into gates.ts they would be the very strings the no-fallback gate looks for, and the gate would fail on its own definition. Exempting the checker from the check is how a rule goes inert, so the list moved instead.",
+ "hosts": [
+  "api.anthropic.com",
+  "api.openai.com",
+  "generativelanguage.googleapis.com",
+  "openrouter.ai",
+  "api.mistral.ai",
+  "api.cohere.ai",
+  "api.together.xyz",
+  "huggingface.co",
+  "api.groq.com",
+  "api.deepseek.com",
+  "api.x.ai"
+ ],
+ "cloud": "openrouter.ai",
+ "cloud_note": "The one hosted provider the cloud module (src/cloud/) may name, chosen per folder by its owner; everywhere else every host above, this one included, still fails the no-fallback gate."
+}

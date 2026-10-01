@@ -1,0 +1,93 @@
+{
+ "note": "Pinned by digest. The download module verifies against these and refuses anything else, and `npm run models -- --pull` fetches only what this machine needs. Each answering model carries what was MEASURED on twelve research questions over public agendas (docs/models.md): the share of key facts found in sentences the checks kept, the median seconds per answer, the memory the runtime reported while it answered with the context window sized to the request, and whether it finished enough questions to be ranked. gpt-oss:120b and gemma4:31b are sized by the file-size estimate, because their reported memory was not usable. The default is the best-measured model that fits the machine, not the largest.",
+ "models": [
+  {
+   "name": "qwen3:30b",
+   "digest": "ad815644918f0eaab341c12b67837cc6dd4562342cdaf118f83d5d554cb37226",
+   "size": 18556699314,
+   "family": "qwen3moe",
+   "parameter_size": "30.5B",
+   "quantization": "Q4_K_M",
+   "research_recall": 68,
+   "median_seconds": 45,
+   "memory_gb": 21.8,
+   "ranked": true
+  },
+  {
+   "name": "gemma4:31b",
+   "digest": "17ba34c06c801ba22f6047bab21ced9429c6d43e0e42ecf339b0f3e5a61e8d97",
+   "size": 20385458234,
+   "family": "gemma4",
+   "parameter_size": "31B",
+   "quantization": "Q4_K_M",
+   "research_recall": 75,
+   "median_seconds": 202,
+   "ranked": true
+  },
+  {
+   "name": "gpt-oss:120b",
+   "digest": "a951a23b46a1f6093dafee2ea481d634b4e31ac720a8a16f3f91e04f5a40ecd9",
+   "size": 65369818941,
+   "family": "gptoss",
+   "parameter_size": "116.8B",
+   "quantization": "MXFP4",
+   "research_recall": 64,
+   "median_seconds": 33,
+   "memory_gb": 64.4,
+   "ranked": true
+  },
+  {
+   "name": "gemma4:26b",
+   "digest": "5571076f3d70050487b26b341705799e0ab29b808164f90d20d4cf84f699d251",
+   "size": 17987581215,
+   "family": "gemma4",
+   "parameter_size": "25.8B",
+   "quantization": "Q4_K_M",
+   "research_recall": 60,
+   "median_seconds": 71,
+   "memory_gb": 17.7,
+   "ranked": true
+  },
+  {
+   "name": "gemma4:12b",
+   "digest": "4eb23ef187e2c5462566d6a1d3bbbc2f1346d0b4327cbb66d58fffbcc9b2b05c",
+   "size": 7556508396,
+   "family": "gemma4",
+   "parameter_size": "11.9B",
+   "quantization": "Q4_K_M",
+   "research_recall": 64,
+   "median_seconds": 112,
+   "memory_gb": 8.4,
+   "ranked": false
+  },
+  {
+   "name": "gemma3:27b",
+   "digest": "a418f5838eaf7fe2cfe0a3046c8384b68ba43a4435542c942f9db00a5f342203",
+   "size": 17396936941,
+   "family": "gemma3",
+   "parameter_size": "27.4B",
+   "quantization": "Q4_K_M",
+   "research_recall": 38,
+   "median_seconds": 93,
+   "memory_gb": 18.8,
+   "ranked": true
+  },
+  {
+   "name": "gemma3:4b",
+   "digest": "a2af6cc3eb7fa8be8504abaf9b04e88f17a119ec3f04a3addf55f92841195f5a",
+   "size": 3338801804,
+   "family": "gemma3",
+   "parameter_size": "4.3B",
+   "quantization": "Q4_K_M",
+   "role": "reading"
+  },
+  {
+   "name": "nomic-embed-text",
+   "digest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+   "size": 274302450,
+   "family": "nomic-bert",
+   "parameter_size": "137M",
+   "quantization": "F16"
+  }
+ ]
+}

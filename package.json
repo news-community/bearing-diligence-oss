@@ -1,0 +1,46 @@
+{
+  "name": "bearing-diligence",
+  "productName": "Bearing Diligence",
+  "version": "0.1.0",
+  "description": "Private research over public meeting records, run on your own computer.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "postinstall": "electron-rebuild -f -w better-sqlite3 --module-dir .",
+    "test": "npm run build && ELECTRON_RUN_AS_NODE=1 electron scripts/test-run.mjs",
+    "gates": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/src/gates/run.js",
+    "prove": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/src/gates/run.js --prove",
+    "senses": "npm run build && python3 scripts/checks.py && python3 scripts/checks.py --prove",
+    "ui": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/tools/ui-dev/serve.js",
+    "ingest": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/src/cli/ingest.js",
+    "ask": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/src/cli/ask.js",
+    "check": "npm run test && npm run gates && npm run prove && npm run senses && npm run smoke && npm run counts",
+    "app": "npm run build && electron .",
+    "smoke": "npm run build && electron dist/test/shell-smoke.js",
+    "probes": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/test/probes-run.js",
+    "deletion-pass": "npm run build && ELECTRON_RUN_AS_NODE=1 electron scripts/deletion-pass.mjs",
+    "watch-calls": "npm run build && ELECTRON_RUN_AS_NODE=1 electron tools/watch-calls.mjs",
+    "models": "npm run build && ELECTRON_RUN_AS_NODE=1 electron dist/src/cli/models.js",
+    "counts": "python3 scripts/checks.py --write-counts"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/newsreader": "5.3.0",
+    "@napi-rs/canvas": "0.1.100",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.19.0",
+    "better-sqlite3": "13.0.3",
+    "pdfjs-dist": "4.10.38",
+    "typescript": "5.9.2"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "4.2.0",
+    "electron": "44.4.5"
+  },
+  "main": "dist/app/main.js"
+}

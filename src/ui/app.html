@@ -1,0 +1,1786 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bearing Diligence</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /*
+   * The look is communities.news's, the company this ships under: its Glacier-tinted near-white page,
+   * near-black text, Glacier blue as the one accent, Geist for the interface and Newsreader for what
+   * is read, 8px corners, and quiet motion that stops for anyone who asks for less. Two places differ
+   * on purpose: an outline button's edge is held
+   * to 3:1 here where the site uses a 12% border, and this app follows the Mac into dark mode, which
+   * the site does not have, with a palette drawn from the family's navy.
+   *
+   * The layout is a conversation with the documents one click away
+   * (docs/design.md).
+   *
+   * Every colour is a token, defined once per theme and nowhere else, and every pair the page draws
+   * is checked by a gate ("every colour pair clears its floor") and measured on the rendered page by
+   * the shell smoke, in both themes. --rule is a DIVIDER and decorative; --control is the visible
+   * edge of a control, held to 3:1 (WCAG 2.2 SC 1.4.11).
+   *
+   * The fonts are files inside the application (Fontsource's Geist and Newsreader, SIL Open Font
+   * License), never a web request: this page reaches nothing outside the machine, and a gate fails
+   * the build if it names a web address.
+   */
+  @font-face { font-family: "Geist"; src: url("fonts/geist-latin-wght-normal.woff2") format("woff2");
+    font-weight: 100 900; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Newsreader"; src: url("fonts/newsreader-latin-wght-normal.woff2") format("woff2");
+    font-weight: 200 800; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Newsreader"; src: url("fonts/newsreader-latin-wght-italic.woff2") format("woff2");
+    font-weight: 200 800; font-style: italic; font-display: swap; }
+  :root {
+    --paper: #f4f7fb; --surface: #ffffff; --sunk: #f1f5f8; --dropped-bg: #fcf5f4; --track: #e2e5e8;
+    --rule: #d9dcdf; --control: #888888; --ink: #121212; --quiet: #68696b; --accent: #1c5988;
+    --kept: #2f6f4f; --dropped: #8a3a2a; --flag: #8a6d1f;
+    --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+    --serif: "Newsreader", ui-serif, Georgia, serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0b1a2b; --surface: #112338; --sunk: #16304a; --dropped-bg: #2b1f24; --track: #1d3550;
+      --rule: #243a52; --control: #6f86a0; --ink: #eef2f7; --quiet: #a9b8c9; --accent: #8fbbe0;
+      --kept: #72c095; --dropped: #ee8f7c; --flag: #d9b45c;
+    }
+  }
+  * { box-sizing: border-box; }
+  /* An element given its own display (the two-pane grid, a count) would otherwise stay on screen
+     with the hidden attribute set; found 2026-09-30 when an empty Checks count still read 0. */
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent); color: var(--paper); }
+
+  /* The frosted header from communities.news: sticky, the page tint at 85%, blurred behind. */
+  header { position: sticky; top: 0; z-index: 40; display: flex; justify-content: space-between;
+    align-items: center; gap: 16px; padding: 10px 20px; min-height: 60px;
+    background: color-mix(in srgb, var(--paper) 85%, transparent);
+    backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border-bottom: 1px solid var(--rule); }
+  @supports not (backdrop-filter: blur(12px)) { header { background: var(--paper); } }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand img { width: 32px; height: 32px; flex-shrink: 0; }
+  h1 { margin: 0; font: 500 1.125rem/1.2 var(--sans); letter-spacing: -0.02em; }
+  .head-right { display: flex; gap: 8px; align-items: center; flex-shrink: 0; position: relative; }
+  header button { white-space: nowrap; }
+
+  h2 { margin: 0 0 14px; font: 600 1.25rem/1.25 var(--sans); letter-spacing: -0.01em; color: var(--ink); }
+  h2.sub { margin: 24px 0 10px; font-size: 1.0625rem; }
+
+  /* Buttons: the site's CTA pair. Near-black that turns Glacier and lifts a pixel; an outline twin. */
+  button { padding: 0.65rem 1.2rem; border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+    border-radius: 8px; font: 600 0.9375rem/1.2 var(--sans); cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease,
+      box-shadow 0.15s ease; }
+  /* Three levels, by role: filled for the one primary action (the default), .quiet with a boundary
+     for secondary actions, .plain for utilities. No lift or shadow on a routine control; the focus
+     ring below is unchanged. */
+  button:hover { background: var(--accent); border-color: var(--accent); }
+  button.quiet { background: transparent; color: var(--ink); border-color: var(--control); }
+  button.quiet:hover { border-color: var(--accent); color: var(--accent); }
+  button.small { padding: 0.4rem 0.8rem; font-size: 0.8125rem; min-height: 32px; }
+  /* A chosen option in a group: filled, and its label says so to a screen reader (aria-pressed). */
+  button.quiet[aria-pressed=true] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  /* A plain text control: the folder name in the header, and the items in a menu. Its target stays
+     24px or more, and the focus ring below is its visible edge. */
+  button.plain { background: transparent; border-color: transparent; color: var(--ink); padding: 4px 6px;
+    font-weight: 400; min-height: 28px; text-align: left; }
+  button.plain:hover { background: var(--sunk); color: var(--ink); border-color: transparent; box-shadow: none; transform: none; }
+  /* A switch, for a setting that is on or off (role="switch", aria-checked): the state is the thumb's
+     side, so the label never has to end in ": on". Its label is a <label for>, so the words toggle it too. */
+  .setting { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0;
+    border-bottom: 1px solid var(--rule); }
+  .setting label { cursor: pointer; }
+  button.switch { position: relative; flex: none; width: 46px; height: 28px; min-height: 28px; padding: 0;
+    border-radius: 999px; background: transparent; border: 2px solid var(--control); }
+  button.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+    border-radius: 50%; background: var(--control); transition: transform 0.15s ease, background 0.15s ease; }
+  button.switch:hover { background: transparent; border-color: var(--accent); }
+  button.switch[aria-checked=true] { background: var(--accent); border-color: var(--accent); }
+  button.switch[aria-checked=true]::after { transform: translateX(18px); background: var(--paper); }
+  /* A pick-one group (Appearance): one bordered control with the chosen segment filled. */
+  .segmented { display: inline-flex; border: 1px solid var(--control); border-radius: 8px; padding: 2px; gap: 2px; }
+  .segmented button.quiet { border-color: transparent; border-radius: 6px; }
+  @media (prefers-reduced-motion: reduce) {
+    button, button:hover, button:active { transition: none; transform: none; }
+  }
+  form { display: flex; gap: 8px; }
+  input[type=text], select, textarea { padding: 0.6rem 0.8rem; border: 1px solid var(--control); border-radius: 8px;
+    background: var(--surface); color: var(--ink); font: 400 0.9375rem/1.4 var(--sans); }
+  input[type=text] { flex: 1; }
+  /* The question grows with what is typed, up to about eight lines, then scrolls. */
+  #askForm { align-items: flex-end; }
+  textarea#q { flex: 1; resize: none; min-height: 42px; max-height: 12rem; overflow-y: auto; }
+  /* A destructive action asks first, in place, with Cancel as the focused default. */
+  .confirm { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .confirm .ask { color: var(--dropped); font-weight: 600; }
+  .show-pills { display: flex; margin: 0 6px 10px; }
+  .show-pills button.quiet.small { flex: 1; padding: 0.4rem 0.3rem; white-space: nowrap; }
+  #askForm button { min-height: 42px; }
+  .path { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  /* One ring for every control, in both themes: --ink clears 3:1 on every ground the page has. */
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+
+  /*
+   * The conversation is the page: answers stack above a
+   * question box at the bottom, and the documents and the checks are a drawer one click away.
+   */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr); min-height: calc(100vh - 61px); }
+  body.side-open .layout { grid-template-columns: var(--side-w, 300px) 9px minmax(0, 1fr); }
+  aside.side { display: none; background: var(--surface); border-right: 1px solid var(--rule); padding: 14px 10px 24px;
+    position: sticky; top: 61px; height: calc(100vh - 61px); overflow: auto; }
+  body.side-open aside.side { display: block; }
+  .side-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 6px 8px;
+    position: relative; }
+  .side-head h2 { margin: 0; font-size: 0.9375rem; }
+  .content { padding: 0 28px; min-width: 0; }
+  .content.with-source { display: grid; grid-template-columns: minmax(0, 1fr) 9px var(--source-w, minmax(0, 0.9fr)); gap: 8px; }
+  #mainCol { display: flex; flex-direction: column; min-height: calc(100vh - 61px); max-width: 48rem; width: 100%; margin: 0 auto; }
+  .content.with-source #mainCol { margin: 0; }
+  #thread { flex: 1; padding: 20px 0 12px; }
+  .composer { position: sticky; bottom: 0; background: var(--paper); border-top: 1px solid var(--rule); padding: 10px 0 14px; }
+  .composer .scope { margin-bottom: 8px; }
+  .thread-head { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 10px 0 0; }
+  .composer .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .msg { margin: 0 0 18px; }
+  .msg.q { text-align: right; }
+  .bubble { display: inline-block; text-align: left; max-width: 85%; background: var(--sunk); color: var(--ink);
+    border-radius: 12px; padding: 9px 13px; font-size: 0.9375rem; }
+  .computed { margin: 0 0 6px; }
+  h3.computed { font: 600 1rem/1.3 var(--sans); margin: 0 0 4px; }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--flag);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; }
+  .card h2 { font-size: 1rem; margin: 0 0 6px; }
+  .briefing { list-style: none; margin: 10px 0 0; padding: 0; }
+  .briefing li { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); column-gap: 14px;
+    padding: 7px 0; border-top: 1px solid var(--rule); }
+  #sourceTitle { font: 500 12.5px/1.4 var(--sans); }
+  .source-actions { display: flex; gap: 4px; flex: none; }
+  .briefing li .cite { grid-column: 2; font-family: var(--sans); }
+  .briefing li.single .cite { grid-row: 1; align-self: center; }
+  .latest { font: 500 13px var(--sans); color: var(--quiet); }
+  /* Where answers come from, said beside the question every time, and in the header while it is the cloud. */
+  .model-note { font-size: 0.8125rem; color: var(--quiet); margin: -4px 0 8px; }
+  .model-note.cloud { color: var(--ink); }
+  .model-note.cloud strong { color: var(--dropped); }
+  .cloud-tag { font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: 0.06em; color: var(--dropped);
+    border: 1px solid var(--dropped); border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
+  .model-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+  .model-row .cite { font-family: var(--sans); }
+  .confirm-cloud { background: var(--dropped-bg); border: 1px solid var(--rule); border-left: 3px solid var(--dropped);
+    border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .keyrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .keyrow input { flex: 1; min-width: 14rem; }
+  .switcher { display: flex; align-items: center; }
+  .suggest { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
+
+  /* The document list. A row is one button that opens its actions. */
+  .rowwrap { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+  button.row { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 8px;
+    background: transparent; border: 1px solid transparent; color: var(--ink); padding: 7px 8px;
+    font: 400 0.875rem/1.3 var(--sans); text-align: left; min-height: 32px; }
+  button.row:hover { background: var(--sunk); color: var(--ink); border-color: transparent; transform: none; box-shadow: none; }
+  button.row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button.row .st { color: var(--quiet); font: 12px/1.3 var(--mono); white-space: nowrap; }
+  button.row.changes .nm { font-weight: 650; }
+  /* The document a question is limited to, so the list agrees with the scope chip. */
+  .rowwrap.scoped { background: var(--sunk); box-shadow: inset 3px 0 0 var(--accent); }
+  button.more { background: transparent; border: 1px solid transparent; color: var(--ink); padding: 4px 8px;
+    min-height: 28px; font-weight: 600; }
+  button.more:hover { background: var(--sunk); color: var(--ink); border-color: var(--control); transform: none; box-shadow: none; }
+  .rowbar { height: 3px; background: var(--track); border-radius: 2px; margin: 0 8px 4px; overflow: hidden; }
+  .rowbar span { display: block; height: 100%; background: var(--kept); }
+  .group-head { margin-top: 10px; }
+  .group-head .count { margin-left: 6px; }
+  details.also { margin-top: 18px; padding: 0 6px; font-size: 0.875rem; }
+  details.also summary { cursor: pointer; color: var(--ink); padding: 4px 0; min-height: 24px; }
+  .rowwrap.elsewhere { justify-content: space-between; gap: 8px; padding: 4px 0 4px 8px; }
+  .rowwrap.elsewhere .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .undo { margin: 0 6px 8px; padding: 8px 10px; background: var(--sunk); border-radius: 8px; font-size: 0.8125rem;
+    display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--sunk);
+    color: var(--ink); font: 600 12px/20px var(--sans); text-align: center; }
+  .reading { padding: 0 6px 10px; }
+
+  /* Popovers: the folder switcher, the view menu, a row's actions. */
+  .pop { position: absolute; z-index: 60; top: calc(100% + 6px); right: 0; width: min(420px, 90vw);
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px;
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 12%, transparent); font-size: 0.875rem; }
+  .pop.menu { width: auto; min-width: 220px; padding: 6px; }
+  .pop.menu button { display: block; width: 100%; }
+  .pop.left { left: 0; right: auto; }
+  .pop label { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; }
+  .pop hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 0; }
+  .switcher { position: relative; }
+  /* The folder you are in, as a control: it reads as where you are, and it opens the switcher. */
+  button.folderbtn { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-weight: 500; }
+  /* The workspace header: the folder is the title, and the app's name steps back to the window title
+     and to screen readers. Header controls carry no outline, as Mac toolbar items have not since 11. */
+  .switcher:has(#where:not([hidden])) h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .switcher:has(#where:not([hidden])) button.folderbtn { margin-top: 0; font: 600 1rem/1.2 var(--sans); }
+  .brand img { width: 28px; height: 28px; }
+  header button.quiet.small, header button.folderbtn { border-color: transparent; background: transparent; }
+  header button.quiet.small:hover, header button.folderbtn:hover, header button[aria-expanded=true] { background: var(--sunk); color: var(--ink); border-color: transparent; }
+  button.iconbtn { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; padding: 0; }
+  button.iconbtn .ico { width: 17px; height: 17px; }
+  .pulse.inline { margin-left: 6px; vertical-align: middle; }
+  /* Pane dividers: drag to resize, double-click to reset; the widths are remembered on this computer. */
+  .divider { display: none; cursor: col-resize; position: sticky; top: 61px; height: calc(100vh - 61px); }
+  .divider::after { content: ""; display: block; width: 1px; height: 100%; margin: 0 auto; background: var(--rule); }
+  .divider:hover::after, .divider.dragging::after { width: 3px; background: var(--control); }
+  body.side-open #sideDivider { display: block; }
+  .content.with-source #sourceDivider { display: block; top: 80px; height: calc(100vh - 110px); margin-top: 18px; }
+  .thread-head .cite { margin-right: auto; }
+  .ico { width: 15px; height: 15px; flex-shrink: 0; }
+
+  /* Settings, the same page in its own window. */
+  .settings { max-width: 44rem; margin: 0 auto; padding: 28px 24px 64px; }
+  /* What is READ is set in Newsreader, the site's editorial face; the interface stays in Geist. */
+  /* The model's words are in the interface face; what a document says is in the reading face. */
+  .passage, .then, .now, .ref .q, .brief, .tagline-sub, .source-text { font-family: var(--serif); }
+  .coverage { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--flag);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; }
+  .sentence { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 12px 14px; margin: 0 0 12px; font-size: 1.0625rem; line-height: 1.6; }
+  /* A kept sentence found its figures and names on the page; whether the page supports it is the
+     reader's to judge (invariant 3). A green rule read as "confirmed", so it is a plain one. */
+  .sentence.kept { border-left: 3px solid var(--rule); }
+  .found { font: 12.5px/1.45 var(--sans); color: var(--quiet); margin-top: 6px; }
+  .sentence.dropped { border-left: 3px solid var(--dropped); background: var(--dropped-bg); }
+  .why { font: 12.5px/1.45 var(--sans); color: var(--dropped); margin-top: 6px; }
+  .passage { margin-top: 10px; padding: 10px 12px; background: var(--sunk); border-radius: 6px;
+    font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; max-height: 12em; overflow: auto; }
+  .cite { font: 11.5px var(--mono); color: var(--quiet); }
+  /* A citation is a control that opens its page beside the answer. */
+  /* A citation is a link that opens its page beside the answer: the accent colour, and its last words
+     say so. The one whose page is open is marked, so the reader can see which sentence they are checking. */
+  button.citebtn { display: block; background: transparent; border: 1px solid transparent; color: var(--accent); padding: 2px 0;
+    min-height: 24px; font: 500 12px var(--sans); border-radius: 4px; margin-bottom: 2px; text-align: left; }
+  button.citebtn .go { text-decoration: underline; text-underline-offset: 2px; }
+  button.citebtn:hover { background: transparent; color: var(--accent); border-color: transparent; transform: none; box-shadow: none; }
+  button.citebtn:hover .go, button.citebtn.active .go { text-decoration-thickness: 2px; }
+  button.citebtn.active { font-weight: 700; }
+  .sentence.dropped { font-size: 0.9375rem; }
+  .sentence.dropped .kind { color: var(--dropped); }
+  .scope { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 0.875rem; color: var(--quiet); }
+  .note { color: var(--quiet); font-size: 13px; margin-top: 12px; }
+  .change { padding: 12px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .kind { font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: 0.06em; color: var(--quiet); }
+  .then, .now { display: block; padding: 8px 11px; margin-top: 6px; background: var(--sunk); border-radius: 6px;
+    font-size: 14px; }
+  .then { border-left: 3px solid var(--rule); }
+  .now { border-left: 3px solid var(--flag); }
+  /* One comparison: the earlier passage and the current one side by side, every differing value marked. */
+  .compare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .compare .then, .compare .now { margin-top: 8px; }
+  .compare .side { display: block; font: 500 12px var(--sans); color: var(--quiet); margin-bottom: 4px; }
+  .briefing-group { margin-top: 12px; }
+  .briefing-group > .kind { display: block; margin-bottom: 2px; }
+  .empty { color: var(--quiet); font-style: italic; }
+  .run { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px;
+    margin-top: 10px; font-size: 13px; }
+  .run.running { border-left: 3px solid var(--kept); }
+  .run.not_moving, .run.stopped, .run.failed { border-left: 3px solid var(--dropped); background: var(--dropped-bg); }
+  .run.finished { border-left: 3px solid var(--rule); }
+  .run .head { font: 12px var(--mono); color: var(--quiet); }
+  .bar { height: 5px; background: var(--track); border-radius: 3px; margin: 8px 0 6px; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--kept); }
+  .run.not_moving .bar span, .run.stopped .bar span, .run.failed .bar span { background: var(--dropped); }
+  .pulse { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--kept);
+    margin-right: 6px; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none } }
+  .ref { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--flag);
+    border-radius: 8px; padding: 11px 13px; margin-bottom: 10px; font-size: 13.5px; }
+  /* Read and judged right: the rule goes quiet and the text keeps full contrast, because the reader may
+     need to read it again. This dimmed with opacity until 2026-09-29, which took its muted text to
+     2.59:1. */
+  .ref.read-right { border-left-color: var(--rule); }
+  .ref.read-wrong { border-left-color: var(--dropped); background: var(--dropped-bg); }
+  .ref .what { font: 11.5px var(--mono); color: var(--quiet); }
+  .ref .q { display: block; background: var(--sunk); border-radius: 6px; padding: 8px 10px; margin: 6px 0;
+    font-size: 14px; white-space: pre-wrap; }
+  .judge { display: flex; gap: 6px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  .side-switch { display: flex; margin: 0 6px 12px; }
+  .side-switch button.quiet.small { flex: 1; }
+  /* A check in the list: one line, the statement and why it was set aside; the page opens beside it. */
+  button.ref-row { display: block; width: 100%; text-align: left; background: transparent; color: var(--ink);
+    border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding: 8px 6px; font-weight: 400; }
+  button.ref-row:hover { background: var(--sunk); color: var(--ink); }
+  button.ref-row .cite { display: block; margin-top: 2px; }
+  .judged { color: var(--quiet); }
+  /* The judgment stays in view while the page scrolls beneath it. */
+  .judge-block { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+  .source .source-head { position: sticky; top: -12px; z-index: 2; background: var(--surface); padding: 8px 0 6px; margin-top: -8px; }
+  #sourceJudge:not(:empty) { position: sticky; top: 30px; z-index: 1; background: var(--surface); padding-top: 4px; }
+  .judge-block .kind { display: block; margin-top: 10px; }
+  .judge-block .kind:first-child { margin-top: 0; }
+  .judge-block .q { font-family: var(--serif); }
+  .judge button { padding: 0.35rem 0.75rem; font-size: 0.8125rem; }
+  .verdicts { margin-bottom: 10px; font-size: 13.5px; }
+  .verdicts div { padding: 3px 0; }
+  .ratebox { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--flag);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; font-size: 14px; }
+  details.explain { margin: 8px 0 14px; font-size: 13.5px; color: var(--ink); }
+  details.explain summary { cursor: pointer; color: var(--quiet); min-height: 24px; padding: 2px 0; }
+  details.left-out { margin: 4px 0 12px; font-size: 13.5px; }
+  details.left-out summary { cursor: pointer; color: var(--dropped); min-height: 24px; padding: 2px 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+  .actions.after { margin-top: 12px; }
+  /* The first thing anyone sees: the line, set the way the site sets its hero. */
+  .first { max-width: 44rem; margin: 0 auto; padding: 48px 24px 72px; }
+  .tagline { margin: 8px 0 28px; }
+  .tagline strong { display: block; font: 700 1.875rem/1.15 var(--sans); letter-spacing: -0.02em; }
+  .tagline-sub { display: block; margin-top: 8px; font-size: 1.25rem; color: var(--quiet); }
+  .facts { font-size: 13.5px; }
+  .facts div { padding: 4px 0; }
+  .facts .what { display: inline-block; min-width: 9em; color: var(--quiet); }
+  .brief { white-space: pre-wrap; font-size: 14.5px; line-height: 1.55; background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; }
+  /* The source pane: the whole page a citation came from, the passage marked. */
+  .source { position: sticky; top: 80px; align-self: start; margin-top: 18px; background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; max-height: calc(100vh - 110px); overflow: auto; }
+  .source-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .source-text { white-space: pre-wrap; font-size: 14.5px; line-height: 1.6; }
+  mark { background: var(--track); color: var(--ink); border-bottom: 2px solid var(--flag); padding: 1px 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* Narrow windows: the drawer covers the conversation rather than squeezing it. */
+  @media (max-width: 760px) {
+    .divider { display: none !important; }
+    .compare { grid-template-columns: minmax(0, 1fr); }
+    body.side-open .layout { grid-template-columns: minmax(0, 1fr); }
+    body.side-open #content { display: none; }
+    aside.side { position: static; height: auto; border-right: 0; }
+    .content { padding: 0 16px; }
+    .content.with-source { grid-template-columns: minmax(0, 1fr); }
+    .source { position: static; max-height: none; }
+    form { flex-direction: column; } .judge { flex-wrap: wrap; }
+    header { flex-wrap: wrap; } .tagline strong { font-size: 1.5rem; }
+    /* The header's buttons wrap under the brand instead of pushing the page wider than the window. */
+    .head-right { flex-shrink: 1; flex-wrap: wrap; min-width: 0; }
+    /* One column: the comparison, then its subject and document, rather than a squeezed second column. */
+    .briefing li { grid-template-columns: minmax(0, 1fr); }
+    .briefing li .cite { grid-column: 1; }
+    .briefing li.single .cite { grid-row: auto; }
+  }
+</style>
+<header>
+  <div class="brand">
+    <img src="icon/bear.svg" alt="">
+    <div class="switcher">
+      <h1>Bearing Diligence</h1>
+      <button type="button" class="quiet small folderbtn" id="where" aria-haspopup="menu" aria-controls="folderMenu" aria-expanded="false"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><span id="whereName">No folder open</span><span aria-hidden="true">▾</span></button>
+      <span class="cloud-tag" id="cloudTag" hidden title="Answers in this folder come from a model on OpenRouter's servers">Cloud</span>
+      <div class="pop menu left" id="folderMenu" role="menu" hidden></div>
+    </div>
+  </div>
+  <div class="head-right">
+    <button type="button" class="quiet small" id="updateNote" hidden></button>
+    <button type="button" class="quiet small" id="checksBtn" aria-controls="side" aria-expanded="false" hidden>Source checks</button>
+    <button type="button" class="quiet small" id="docsBtn" aria-controls="side" aria-expanded="false" hidden>Documents</button>
+    <button type="button" class="quiet small iconbtn" id="settingsBtn" aria-label="Settings" title="Settings"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+<section class="first" id="firstRun" hidden>
+  <p class="tagline"><strong>Get your bearings before the meeting.</strong><span class="tagline-sub">Do your research. Show your sources.</span></p>
+  <h2>Open a folder of documents</h2>
+  <div id="firstRunWhy"></div>
+  <p>Choose a folder of meeting records from a body you follow: a council, a school board, a
+    utility. Agendas, packets and minutes are usually on its website; save the PDFs into one folder.
+    Every PDF and text file in it, and in its subfolders, is read on this computer, one at a time,
+    and you can ask about each one as soon as it is added. Anything in a subfolder named
+    <em>private</em> is kept as your own notes. To add a document later, put it in the folder.</p>
+  <div class="actions"><button type="button" id="chooseBtn">Open a folder</button></div>
+  <div id="chooseOutcome"></div>
+</section>
+<section class="settings" id="settingsView" hidden></section>
+<div class="layout needs-record" id="app" hidden>
+  <aside class="side" id="side" aria-label="Documents and checks">
+    <div class="segmented side-switch" role="group" aria-label="Show in the sidebar" id="sideSwitch">
+      <button type="button" class="quiet small" data-pane="docs" aria-pressed="true">Documents</button>
+      <button type="button" class="quiet small" data-pane="checks" aria-pressed="false">Source checks</button>
+    </div>
+    <div id="docsPane">
+      <div class="side-head">
+        <h2 id="docsHeading" class="sr">Documents</h2>
+        <button type="button" class="quiet small" id="viewBtn" aria-controls="viewPop" aria-expanded="false">Sort</button>
+        <div class="pop" id="viewPop" hidden>
+          <label>Group by <select id="groupBy"><option value="folder">Folder</option><option value="state">State</option><option value="none">None</option></select></label>
+          <label>Sort by <select id="sortBy"><option value="name">Name</option><option value="modified">Date modified</option><option value="added">Date added</option></select></label>
+        </div>
+      </div>
+      <div class="segmented show-pills" role="group" aria-label="Show" id="showPills">
+        <button type="button" class="quiet small" data-show="all" aria-pressed="true">All</button>
+        <button type="button" class="quiet small" data-show="changes" aria-pressed="false">Changes</button>
+        <button type="button" class="quiet small" data-show="unread" aria-pressed="false">Processing</button>
+        <button type="button" class="quiet small" data-show="out" aria-pressed="false">Excluded</button>
+      </div>
+      <div class="reading"><p class="cite" id="queue"></p><div id="runs"></div></div>
+      <div id="undoLine"></div>
+      <div id="docs" aria-labelledby="docsHeading"></div>
+    </div>
+    <div id="checksPane" hidden>
+      <div class="side-head"><h2 class="sr">Source checks</h2><span class="count" id="checksCount" hidden></span></div>
+      <p class="note">Optional. When the model states something, code looks for its quote on the page and
+        sets the statement aside if it is not there. Judging a set-aside statement measures how often
+        that check is wrong; it changes no answer.</p>
+      <div id="refusals"></div>
+      <h2 class="sub">What a document says to a machine</h2>
+      <div id="marks"></div>
+    </div>
+    <div class="pop menu" id="rowMenu" role="menu" hidden></div>
+  </aside>
+  <div class="divider" id="sideDivider" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar" title="Drag to resize; double-click to reset"></div>
+  <main class="content" id="content">
+    <div id="mainCol">
+      <div class="tools thread-head">
+        <span class="cite" id="savedNote"></span>
+        <button type="button" class="plain" id="saveConv" hidden>Save</button>
+        <button type="button" class="plain" id="newConv" hidden>New conversation</button>
+      </div>
+      <div id="thread" aria-live="polite"></div>
+      <div class="composer">
+        <div class="scope" id="scope"></div>
+        <div class="model-note" id="modelNote"></div>
+        <form id="askForm">
+          <textarea id="q" rows="1" placeholder="Ask about these documents" autocomplete="off" aria-label="Your question"
+            aria-describedby="qHint"></textarea>
+          <button type="submit">Ask</button>
+          <button type="button" class="plain" id="searchBtn" title="Find source text without writing an answer">Search passages</button>
+        </form>
+        <div class="sr" id="qHint">Return asks; Shift and Return starts a new line.</div>
+      </div>
+    </div>
+    <div class="divider" id="sourceDivider" role="separator" aria-orientation="vertical" aria-label="Resize the source pane" title="Drag to resize; double-click to reset"></div>
+    <aside class="source" id="source" aria-label="Source" hidden>
+      <div class="source-head"><span class="cite" id="sourceTitle"></span>
+        <span class="source-actions"><button type="button" class="plain" id="sourceOpen" hidden>Open PDF</button>
+        <button type="button" class="plain iconbtn" id="sourceClose" aria-label="Close source" title="Close source">×</button></span></div>
+      <div id="sourceJudge"></div>
+      <div class="source-text" id="sourceText"></div>
+    </aside>
+  </main>
+</div>
+<div class="sr" id="live" aria-live="polite"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // This page has no way to reach the network, and that is checked rather than intended.
+  //
+  // It talks to `window.record`, which the application provides over Electron IPC. The development
+  // server under tools/ injects its own `window.record` built on fetch before this script runs, so
+  // the same page can be driven in a browser without the page knowing. It used to carry that fetch
+  // fallback itself, until the forbidden-reference gate was widened past src/ and found it: the
+  // shipped renderer was carrying three network calls it never used.
+  const api = window.record;
+  if (!api) {
+    document.body.innerHTML =
+      '<p style="padding:20px">Nothing is providing the record to this page. ' +
+      "Open it from the application, or serve it with npm run ui.</p>";
+    throw new Error("no record bridge");
+  }
+  const esc = (s) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+  const say = (text) => { $("live").textContent = text; };
+  const SETTINGS = location.hash === "#settings";
+
+  // Page state, and nothing else holds it: the folder listing, the documents, the row the menu bar's
+  // Document commands act on, a scope Ask was narrowed to, one pending undo, and the conversation.
+  // The conversation is kept only here and is gone when the app quits, unless this folder saves
+  // conversations or the person saves this one (invariant 6).
+  const ui = { folder: null, docs: {}, sel: null, scope: null, undo: null,
+    view: { group: "folder", sort: "name", show: "all" },
+    turns: [], convId: null, saving: false, saveAll: false, drawer: null };
+
+  const verdictBlock = (v) => `
+    ${v.refusals.map((r) => `<div class="why">refused: ${esc(r)}</div>`).join("")}
+    <div class="note"><strong>Checked:</strong> ${esc(v.checked.join("; "))}.</div>
+    <div class="note"><strong>Cannot see:</strong> ${esc(v.cannotSee.join("; "))}.</div>
+    ${v.observed.length ? `<div class="note"><strong>Worth knowing:</strong> ${esc(v.observed.join("; "))}.</div>` : ""}`;
+
+  /**
+   * No record, or a refused one, shows ONE thing: where the record lives and the control that
+   * chooses it. The shell used to show the refusal and nothing else, with no control anywhere on
+   * the page that could change the answer.
+   */
+  function showFirstRun(s) {
+    $("app").hidden = true;
+    $("docsBtn").hidden = $("checksBtn").hidden = true;
+    $("firstRun").hidden = false;
+    $("whereName").textContent = "No folder open";
+    $("firstRunWhy").innerHTML = s.first_run
+      ? `<p class="empty">${esc(s.message)}</p>`
+      : `<div class="sentence dropped"><strong>The record will not open in ${esc(s.dir)}.</strong>${verdictBlock(s.verdict)}</div>`;
+  }
+
+  async function state() {
+    const s = await api.state();
+    if (SETTINGS) return renderSettings(s);
+    if (s.ok === false) return showFirstRun(s);
+    $("firstRun").hidden = true;
+    $("app").hidden = false;
+    $("docsBtn").hidden = $("checksBtn").hidden = false;
+    if (!state.launchShown) { state.launchShown = true; showLaunchResult(); }
+    const changed = ui.dir !== s.dir;
+    ui.dir = s.dir;
+    $("whereName").textContent = s.dir.split("/").filter(Boolean).pop() || s.dir;
+    $("where").title = s.dir + " (model " + s.model + "). Switch folders.";
+    ui.docs = Object.fromEntries(s.documents.map((d) => [d.id, d]));
+    if (changed) resetConversation();
+    await showFolder();
+    showRuns();
+    showModelNote();
+    showScope();
+    showChecks();
+  }
+
+  async function choose() {
+    // Every outcome lands where the choice was made from. The first version sent an ERROR to the
+    // first-run section whatever page was showing, so "Open another folder" failing did nothing
+    // visible: found by clicking it in the development server, where it always fails.
+    const where = SETTINGS ? "settingsView" : $("firstRun").hidden ? "thread" : "chooseOutcome";
+    $("chooseOutcome").innerHTML = "";
+    let r;
+    try {
+      r = await api.chooseRecord();
+    } catch (e) {
+      $(where).insertAdjacentHTML("afterbegin", `<div class="sentence dropped"><div class="why">${esc(e.message)}</div></div>`);
+      return;
+    }
+    if (r.ok) return state();
+    if (r.cancelled) return;
+    $(where).insertAdjacentHTML("afterbegin", r.verdict
+      ? `<div class="sentence dropped"><strong>That folder was refused.</strong>${verdictBlock(r.verdict)}</div>`
+      : `<div class="sentence dropped"><div class="why">${esc(r.message)}</div></div>`);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The folder switcher, in the header.
+
+  async function openFolderMenu() {
+    const menu = $("folderMenu");
+    let recent = [], current = null;
+    try {
+      ({ recent, current } = await api.recentFolders());
+    } catch {
+      // A browser serves one folder; the switcher still offers opening one and Settings.
+    }
+    const name = (d) => d.split("/").filter(Boolean).pop() || d;
+    menu.innerHTML =
+      recent.map((r, i) => `<button type="button" class="plain" role="menuitem" data-folder="${i}"
+        ${r.dir === current ? 'aria-current="true"' : ""} title="${esc(r.dir)}">${r.dir === current ? "✓ " : ""}${esc(name(r.dir))}</button>`).join("") +
+      (recent.length ? "<hr>" : "") +
+      `<button type="button" class="plain" role="menuitem" data-act="open">Open a folder…</button>`;
+    menu.onclick = async (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      closePops();
+      if (b.dataset.act === "open") return choose();
+      const r = recent[+b.dataset.folder];
+      if (!r || r.dir === current) return;
+      try {
+        const out = await api.switchFolder(r.dir);
+        if (out.ok === false) say("That folder would not open: " + out.verdict.refusals.join("; "));
+      } catch (err) { say(err.message); }
+      state();
+    };
+    togglePop("where", "folderMenu");
+    menu.querySelector("button")?.focus();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The document list, in the drawer.
+
+  const STATE_WORD = { "read": "ready", "reading": "processing", "waiting": "waiting", "not read": "not read",
+    "stopped partway": "stopped", "could not be read": "failed", "left out": "excluded",
+    "cannot read this type yet": "can't read" };
+  const UNREAD = new Set(["not read", "reading", "waiting", "stopped partway"]);
+
+  /**
+   * The folder's documents and where each one is. Asking also queues any file not yet read, so a
+   * document dropped into the folder is picked up on the next refresh without a button.
+   */
+  async function showFolder() {
+    let f;
+    try {
+      f = await api.folder();
+    } catch (e) {
+      $("queue").textContent = e.message;
+      return;
+    }
+    // A file that finished reading since the page last asked has counts the page has not seen yet.
+    if (f.files.some((x) => x.state === "read" && !ui.docs[x.document_id]) && !showFolder.refreshing) {
+      showFolder.refreshing = true;
+      try { return await state(); } finally { showFolder.refreshing = false; }
+    }
+    ui.folder = f;
+    $("queue").textContent = f.summary + (f.truncated ? " Only the first 2,000 files are listed." : "");
+    const readable = f.files.filter((x) => x.state !== "cannot read this type yet" && x.state !== "left out");
+    const reading = readable.filter((x) => UNREAD.has(x.state)).length;
+    // "Ready", not "read": ready to ask about, which is not the same as the person having read them.
+    // The count only; what is still processing is a pulse here and said in full in the documents view.
+    $("docsBtn").innerHTML = `Documents · ${readable.length}` + (reading ? '<span class="pulse inline" aria-hidden="true"></span>' : "");
+    $("docsBtn").setAttribute("aria-label", `Documents, ${readable.length}` + (reading ? `, ${reading} still processing` + (f.eta ? `, ${f.eta}` : "") : ""));
+    $("docsBtn").title = reading ? `${reading} still processing` + (f.eta ? `, ${f.eta}` : "") : "";
+    showReadingNow();
+    renderList();
+  }
+
+  function visibleFiles() {
+    const v = ui.view;
+    let files = ui.folder.files.slice();
+    if (v.show === "unread") files = files.filter((x) => UNREAD.has(x.state));
+    if (v.show === "changes") files = files.filter((x) => x.state === "read" && (ui.docs[x.document_id] || {}).changes > 0);
+    if (v.show === "out") files = files.filter((x) => x.state === "left out");
+    const added = (x) => (ui.docs[x.document_id] || {}).added_at || "";
+    files.sort(v.sort === "modified" ? (a, b) => (b.modified || 0) - (a.modified || 0)
+      : v.sort === "added" ? (a, b) => added(b).localeCompare(added(a))
+      : (a, b) => a.name.localeCompare(b.name));
+    return files;
+  }
+
+  function groupsOf(files) {
+    const v = ui.view.group;
+    if (v === "none") return [["", files]];
+    const key = (x) => v === "state" ? STATE_WORD[x.state] : (x.name.includes("/") ? x.name.slice(0, x.name.lastIndexOf("/")) : "");
+    const map = new Map();
+    for (const x of files) { const k = key(x); if (!map.has(k)) map.set(k, []); map.get(k).push(x); }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }
+
+  function rowHtml(x) {
+    const i = ui.folder.files.indexOf(x);
+    const d = x.state === "read" ? ui.docs[x.document_id] : null;
+    const word = STATE_WORD[x.state] + (x.state === "reading" && x.detail ? ", " + x.detail : "");
+    const bar = x.state === "reading" && /window (\d+) of (\d+)/.test(x.detail || "")
+      ? (([, a, b]) => `<div class="rowbar"><span style="width:${Math.max(4, Math.round((a / b) * 100))}%"></span></div>`)(x.detail.match(/window (\d+) of (\d+)/))
+      : "";
+    const scoped = ui.scope && ui.scope.name === x.name;
+    return `
+      <div class="rowwrap${scoped ? " scoped" : ""}">
+        <button type="button" class="row ${d && d.changes ? "changes" : ""}" data-i="${i}" aria-haspopup="menu"
+          title="${esc(x.name + (x.layer === "private" ? " (private)" : "") + (x.state === "could not be read" ? ": reading failed" : ""))}">
+          <span class="nm">${esc(x.label)}</span><span class="st">${esc(scoped ? "only this" : word)}</span>
+        </button>
+      </div>${bar}`;
+  }
+
+  function renderList() {
+    const f = ui.folder;
+    if (!f) return;
+    // The list is rebuilt on every poll while documents are read; rebuilding it under a person who is
+    // moving through it with the keyboard threw their focus away. So the same list is not rebuilt, and
+    // a changed one gives focus back to the same control.
+    const hadKey = document.activeElement && $("docs").contains(document.activeElement)
+      ? ["data-i", "data-forget"].map((k) => [k, document.activeElement.getAttribute(k)]).find(([, v]) => v !== null) : null;
+    const files = visibleFiles();
+    const groups = groupsOf(files);
+    const html = (f.files.length ? groups.map(([name, rows]) =>
+      (name || (ui.view.group !== "none" && groups.length > 1)
+        ? `<div class="group-head cite">${esc(name || (ui.view.group === "folder" ? "This folder" : ""))}<span class="count">${rows.length}</span></div>` : "") +
+      rows.map(rowHtml).join("")).join("")
+      : '<p class="empty" style="padding:0 8px">No PDFs or text files here yet. Put documents in this folder and they will be read.</p>') +
+      (files.length === 0 && f.files.length ? '<p class="empty" style="padding:0 8px">Nothing matches what View is set to show.</p>' : "") +
+      (f.elsewhere.length ? `
+        <details class="also"${$("docs").querySelector("details.also")?.open ? " open" : ""}><summary>Also in the record <span class="count">${f.elsewhere.length}</span></summary>
+          <p class="note">Earlier versions of files that changed, and files no longer in this folder. Ask still
+            searches them, and changes are compared against them.</p>
+          ${f.elsewhere.map((e) => `
+            <div class="rowwrap elsewhere"><span class="nm">${esc(e.filename)}</span><span class="cite">${esc((e.added_at || "").slice(0, 10))}</span>
+              <button type="button" class="more" data-forget="${e.document_id}" aria-label="Exclude ${esc(e.filename)}">Exclude</button></div>`).join("")}
+        </details>` : "");
+    if (html === renderList.last) return;
+    renderList.last = html;
+    $("docs").innerHTML = html;
+    if (hadKey) $("docs").querySelector(`[${hadKey[0]}="${hadKey[1]}"]`)?.focus();
+  }
+
+  /** Leave out: done at once, with an Undo, and focus moves on to the next row. */
+  async function leaveOutFile(name) {
+    const rows = [...$("docs").querySelectorAll("button.row")];
+    const at = rows.findIndex((b) => ui.folder.files[+b.dataset.i]?.name === name);
+    try {
+      await api.leaveOut(name);
+    } catch (e) {
+      say(e.message);
+      $("undoLine").innerHTML = `<div class="undo"><span>${esc(e.message)}</span></div>`;
+      return;
+    }
+    const f = ui.folder.files.find((x) => x.name === name);
+    const read = f && f.state === "read";
+    ui.undo = name;
+    $("undoLine").innerHTML = `<div class="undo"><span>Excluded ${esc(name)}. What was read from it is removed from this folder's record; the file stays in your folder.${read ? " Undo reads it again." : ""}</span>
+      <button type="button" class="quiet small" id="undoBtn">Undo</button></div>`;
+    $("undoBtn").addEventListener("click", undo);
+    say(`Excluded ${name}.`);
+    if (ui.scope && ui.scope.name === name) ui.scope = null;
+    await state();
+    const next = [...$("docs").querySelectorAll("button.row")][Math.max(0, at)] || $("docs").querySelector("button.row");
+    next?.focus();
+  }
+
+  async function includeFile(name) {
+    try {
+      await api.includeAgain(name);
+    } catch (e) {
+      say(e.message);
+      return;
+    }
+    say(`Included ${name} again. It will be read.`);
+    await state();
+  }
+
+  async function undo() {
+    const name = ui.undo;
+    if (!name) return;
+    ui.undo = null;
+    $("undoLine").innerHTML = "";
+    await includeFile(name);
+  }
+
+  /** A row's actions. Every one acts on the conversation or on the file, and none changes the page. */
+  function openRowMenu(i, anchor) {
+    const x = ui.folder.files[i];
+    ui.sel = x.name;
+    const read = x.state === "read";
+    const held = x.document_id && x.state !== "left out";
+    const menu = $("rowMenu");
+    menu.innerHTML = [
+      read ? `<button type="button" class="plain" role="menuitem" data-act="changes">View changes</button>` : "",
+      read ? `<button type="button" class="plain" role="menuitem" data-act="brief">Create brief</button>` : "",
+      held ? `<button type="button" class="plain" role="menuitem" data-act="only">Ask only this document</button>` : "",
+      x.state === "left out"
+        ? `<button type="button" class="plain" role="menuitem" data-act="include">Include again</button>`
+        : x.state === "reading" || x.state === "cannot read this type yet" ? "" : `<button type="button" class="plain" role="menuitem" data-act="out">Exclude document</button>`,
+      `<button type="button" class="plain" role="menuitem" data-act="finder">Show in Finder</button>`,
+    ].join("");
+    menu.hidden = false;
+    const box = anchor.getBoundingClientRect(), side = $("side").getBoundingClientRect();
+    menu.style.top = (box.bottom - side.top + $("side").scrollTop + 4) + "px";
+    menu.style.right = "10px";
+    menu.onclick = (e) => {
+      const act = e.target.closest("[data-act]")?.dataset.act;
+      if (!act) return;
+      closePops();
+      if (act === "changes") return addChange(x.document_id, x.name);
+      if (act === "brief") return addBrief(x.document_id, x.name);
+      if (act === "only") { ui.scope = { id: x.document_id, name: x.name, label: x.label }; showScope(); return $("q").focus(); }
+      if (act === "out") return leaveOutFile(x.name);
+      if (act === "include") return includeFile(x.name);
+      if (act === "finder") return showInFinder(x.name);
+    };
+    menu.querySelector("button")?.focus();
+  }
+
+  async function showInFinder(name) {
+    try { await api.showInFinder(name); } catch (e) { say(e.message); $("undoLine").innerHTML = `<div class="undo"><span>${esc(e.message)}</span></div>`; }
+  }
+
+  // Clicks, the context menu, arrows and type-ahead, all on the list itself.
+  $("docs").addEventListener("click", (e) => {
+    const forget = e.target.closest("[data-forget]");
+    if (forget) return api.leaveOut({ document: +forget.dataset.forget }).then(state, (err) => say(err.message));
+    const row = e.target.closest("button.row");
+    if (row) openRowMenu(+row.dataset.i, row);
+  });
+  $("docs").addEventListener("contextmenu", (e) => {
+    const row = e.target.closest("button.row");
+    if (!row) return;
+    e.preventDefault();
+    openRowMenu(+row.dataset.i, row);
+  });
+  $("docs").addEventListener("keydown", (e) => {
+    const rows = [...$("docs").querySelectorAll("button.row")];
+    const at = rows.indexOf(document.activeElement);
+    if (at === -1) return;
+    const go = (i) => { e.preventDefault(); rows[Math.max(0, Math.min(rows.length - 1, i))].focus(); };
+    if (e.key === "ArrowDown") return go(at + 1);
+    if (e.key === "ArrowUp") return go(at - 1);
+    if (e.key === "Home") return go(0);
+    if (e.key === "End") return go(rows.length - 1);
+    if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      clearTimeout(ui.typeTimer);
+      ui.typed = (ui.typed || "") + e.key.toLowerCase();
+      ui.typeTimer = setTimeout(() => (ui.typed = ""), 700);
+      const hit = rows.findIndex((b) => b.querySelector(".nm").textContent.toLowerCase().startsWith(ui.typed));
+      if (hit !== -1) go(hit);
+    }
+  });
+
+  /** The drawer shows the documents or the checks, whichever button opened it; the same button closes it. */
+  /** One sidebar, two destinations: the header buttons open and close it, the switch moves within it. */
+  function showPane(which) {
+    ui.drawer = which;
+    $("docsPane").hidden = which !== "docs";
+    $("checksPane").hidden = which !== "checks";
+    for (const b of $("sideSwitch").querySelectorAll("[data-pane]")) b.setAttribute("aria-pressed", String(b.dataset.pane === which));
+    $("docsBtn").setAttribute("aria-expanded", String(which === "docs"));
+    $("checksBtn").setAttribute("aria-expanded", String(which === "checks"));
+    if (which === "checks") showChecks();
+  }
+  function toggleDrawer(which) {
+    const open = !(document.body.classList.contains("side-open") && ui.drawer === which);
+    document.body.classList.toggle("side-open", open);
+    if (open) return showPane(which);
+    ui.drawer = null;
+    $("docsBtn").setAttribute("aria-expanded", "false");
+    $("checksBtn").setAttribute("aria-expanded", "false");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The conversation.
+
+  const readCount = () => Object.keys(ui.docs).length;
+  const scopeLabel = () => ui.scope ? `only ${ui.scope.label || ui.scope.name}`
+    : readCount() === 0 ? "no documents yet" : readCount() === 1 ? "the one document" : `all ${readCount()} documents`;
+  function showScope() {
+    $("scope").innerHTML = `<span>Asking ${esc(scopeLabel())}.</span>` +
+      (ui.scope ? `<button type="button" class="quiet small" id="scopeAll">Use all documents</button>` : "");
+    $("scopeAll")?.addEventListener("click", () => { ui.scope = null; showScope(); });
+    $("q").placeholder = ui.scope ? "Ask about this document" : `Ask about ${scopeLabel()}`;
+    renderList(); // the list marks the scoped document, so it and the chip agree
+  }
+
+  /**
+   * The part of a cited page that bears on a sentence: the stretch sharing most of its figures and
+   * words, with a neighbour on each side. A whole page shown under every sentence put the page's own
+   * header in front of the reader and highlighted everything in the source pane (2026-09-30). This is
+   * display only: the sentence was checked against the whole passage, and the page is one click away.
+   */
+  const STOP = new Set("the a an and or of to in on for is was were are be by with that this at as from it its".split(" "));
+  function excerpt(text, about) {
+    // Pieces with their positions, taken as the page is split, so a short piece ("6.") is never
+    // looked up by searching for it: that found "2026." earlier on the page and started the excerpt
+    // two items too early (2026-09-30). An item number stays with the text it numbers.
+    const pieces = [];
+    const cut = /(?<=[.;:])\s+|\n(?=\s*\d{1,2}\.\s)/g;
+    let at = 0;
+    for (const m of text.matchAll(cut)) {
+      pieces.push({ start: at, end: m.index });
+      at = m.index + m[0].length;
+    }
+    pieces.push({ start: at, end: text.length });
+    const merged = [];
+    for (const p of pieces) {
+      const prev = merged[merged.length - 1];
+      if (prev && /^\s*\d{1,2}\.\s*$/.test(text.slice(prev.start, prev.end))) prev.end = p.end;
+      else if (text.slice(p.start, p.end).trim()) merged.push({ ...p });
+    }
+    if (merged.length <= 3 || !about) return { shown: text, quote: text };
+    const nums = (String(about).match(/\d[\d,.]*/g) || []).map((n) => n.replace(/[,.]$/, ""));
+    const words = (String(about).toLowerCase().match(/[a-z][a-z-]{3,}/g) || []).filter((w) => !STOP.has(w));
+    const piece = (p) => text.slice(p.start, p.end);
+    const score = (p) => { const x = piece(p), l = x.toLowerCase(); return nums.filter((n) => x.includes(n)).length * 3 + words.filter((w) => l.includes(w)).length; };
+    let best = 0;
+    merged.forEach((p, i) => { if (score(p) > score(merged[best])) best = i; });
+    const from = Math.max(0, best - 1), to = Math.min(merged.length, best + 2);
+    const shown = text.slice(merged[from].start, merged[to - 1].end);
+    return { shown: (from > 0 ? "… " : "") + shown + (to < merged.length ? " …" : ""), quote: piece(merged[best]) };
+  }
+  /** A document's readable name, from the documents the page already holds, else its filename. */
+  const docLabel = (filename) => Object.values(ui.docs).find((d) => d.filename === filename)?.label || filename;
+  const citeBtn = (p, quote) => `<button type="button" class="citebtn" data-page="${esc(p.id)}" data-quote="${esc(quote ?? p.text)}">${esc(docLabel(p.filename))} · page ${p.page_no} · <span class="go">View source</span></button>`;
+  /** A quote under a sentence. `found` adds what a kept sentence's receipt does and does not say. */
+  const passageBlock = (p, about, found) => {
+    const { shown, quote } = excerpt(p.text, about);
+    return `<div class="passage">${citeBtn(p, quote)}${esc(shown)}</div>` +
+      (found ? `<div class="found">Source passage found. Read it to confirm it supports the sentence.</div>` : "");
+  };
+
+  /** Add one message to the thread and bring it into view. */
+  function append(html) {
+    $("thread").querySelector(".empty-state")?.remove();
+    $("thread").insertAdjacentHTML("beforeend", `<div class="msg">${html}</div>`);
+    const last = $("thread").lastElementChild;
+    last.scrollIntoView({ block: "end" });
+    return last;
+  }
+  const asked = (q) => `<div class="msg q"><div class="bubble">${esc(q)}</div></div>`;
+
+  /** An answer, as HTML: its scope, a quote under every sentence, dropped sentences behind one line. */
+  function answerHtml(a, label) {
+    const who = a.via === "cloud" ? `${a.model} via OpenRouter${a.served_by ? `, served by ${a.served_by}` : ""}` : `${a.model} on this computer`;
+    const head = `<div class="cite">Asked of ${esc(label)} · answered by ${esc(who)}.</div>`;
+    if (a.failure) {
+      return head + `<div class="sentence dropped"><strong>No answer.</strong>
+        <div class="why">${esc(a.failure)}</div><div class="note">${esc(a.note)}</div></div>` +
+        (a.passages || []).map((p) => passageBlock(p, a.question)).join("");
+    }
+    const byId = Object.fromEntries((a.passages || []).map((p) => [p.id, p]));
+    const kept = a.sentences.filter((s) => s.kept), dropped = a.sentences.filter((s) => !s.kept);
+    return head +
+      kept.map((s) => `
+        <div class="sentence kept">
+          <div>${esc(s.text)}</div>
+          ${s.receipts.map((r) => byId[r] ? passageBlock(byId[r], s.text, true) : "").join("")}
+        </div>`).join("") +
+      (dropped.length ? `
+        <details class="left-out"><summary>${dropped.length} sentence${dropped.length === 1 ? "" : "s"} left out: the source check could not verify ${dropped.length === 1 ? "it" : "them"}</summary>
+          ${dropped.map((s) => `<div class="sentence dropped"><span class="kind">Left out</span><div>${esc(s.text)}</div><div class="why">Why: ${esc(s.dropped_because)}</div></div>`).join("")}
+        </details>` : "") +
+      (!a.sentences.length ? `<p class="empty">Not in these documents: nothing in ${esc(label)} answered that.</p>` : "") +
+      `<details class="explain"><summary>How this answer was checked</summary><div>${esc(a.note)}</div></details>`;
+  }
+
+  /** The question box grows with what is typed, up to its CSS max-height. */
+  function fitQuestion() {
+    const q = $("q");
+    q.style.height = "auto";
+    q.style.height = q.scrollHeight + 2 + "px";
+  }
+  /** A path under the home folder as a Mac shows it (~/...); the full path stays in the title. */
+  const tilde = (p) => String(p || "").replace(/^\/Users\/[^/]+(?=\/|$)/, "~");
+
+  /** What an answer said, as text, for the next question's "earlier in this conversation". */
+  const answerText = (a) => a && a.sentences ? a.sentences.filter((s) => s.kept).map((s) => s.text).join(" ") : "";
+
+  async function ask(ev) {
+    ev.preventDefault();
+    const q = $("q").value.trim();
+    if (!q) return;
+    $("q").value = "";
+    fitQuestion();
+    $("thread").querySelector(".empty-state")?.remove();
+    const scope = ui.scope, label = scopeLabel();
+    $("thread").insertAdjacentHTML("beforeend", asked(q));
+    const msg = append("<p class='empty'>reading the record…</p>");
+    const earlier = ui.turns.slice(-2).map((t) => ({ question: t.question, answer: answerText(t.answer) }));
+    let a;
+    try {
+      a = await api.ask(q, scope ? scope.id : undefined, earlier);
+    } catch (e) {
+      msg.innerHTML = `<div class="sentence dropped"><div class="why">${esc(e.message)}</div></div>`;
+      return;
+    }
+    msg.innerHTML = answerHtml(a, label);
+    msg.scrollIntoView({ block: "start" });
+    ui.turns.push({ question: q, asked_at: new Date().toISOString(), answer: { ...a, label } });
+    await keepIfSaving();
+    showSaveTools();
+  }
+
+  async function searchOnly() {
+    const q = $("q").value.trim();
+    if (!q) return;
+    $("q").value = "";
+    fitQuestion();
+    $("thread").querySelector(".empty-state")?.remove();
+    const scope = ui.scope, label = scopeLabel();
+    $("thread").insertAdjacentHTML("beforeend", asked(q));
+    const msg = append("<p class='empty'>searching…</p>");
+    const r = await api.search(q, scope ? scope.id : undefined);
+    msg.innerHTML = `<div class="cite">Searched ${esc(label)}. No model was asked.</div>` + (r.passages.length
+      ? r.passages.map((p) => passageBlock(p, q)).join("")
+      : '<p class="empty">Nothing in the record matched those words.</p>');
+  }
+
+  /** What kind of change, in words that claim no more than the comparison knows. */
+  const kindWord = (ch) => ({ moved_date: "Dates differ", moved_figure: "Amounts differ", new_identifier: "First found in this folder",
+    recurrence: `Seen in ${ch.count} documents` })[ch.kind] || ch.kind;
+  /** A passage with each value that differs marked, the way the source pane marks a quote. */
+  function markValues(passage, values) {
+    // A value is matched with any run of spaces or line breaks between its words, since a PDF wraps
+    // "June 15, 2026" across lines as readily as anything else.
+    let out = esc(passage);
+    for (const v of [...new Set(values.filter(Boolean))].sort((a, b) => b.length - a.length)) {
+      const re = new RegExp(esc(v).split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "g");
+      out = out.replace(re, (m) => `<mark>${m}</mark>`);
+    }
+    return out;
+  }
+
+  /**
+   * The card's changes, grouped by kind so "First found in this folder" is said once; a comparison
+   * leads with its values, then the subject and the document.
+   */
+  function briefingHtml(changes) {
+    if (!changes.length) return "";
+    const kinds = [...new Set(changes.map((c) => c.kind))];
+    return kinds.map((k) => {
+      const items = changes.filter((c) => c.kind === k);
+      return `<div class="briefing-group"><span class="kind">${esc(kindWord(items[0]))}</span><ul class="briefing">${items.map((c) =>
+        c.pairs.length
+          ? `<li><strong>${c.pairs.map((p) => `${esc(p.then)} → ${esc(p.now)}`).join("; ")}</strong><span>${esc(c.label)}</span><span class="cite">${esc(c.document)}</span></li>`
+          : `<li class="single"><strong>${esc(c.label)}</strong><span class="cite">${esc(c.document)}</span></li>`).join("")}</ul></div>`;
+    }).join("");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Which model answers: on this computer by default, or the cloud when this folder's owner chose it.
+
+  /** The notice beside the question and the header's Cloud label, from the folder's own choice. */
+  async function showModelNote() {
+    let m;
+    try { m = await api.modelSettings(); } catch { $("modelNote").textContent = ""; $("cloudTag").hidden = true; return; }
+    const c = m.choice, cloud = c.where === "cloud";
+    $("cloudTag").hidden = !cloud;
+    $("modelNote").className = "model-note" + (cloud ? " cloud" : "");
+    $("modelNote").innerHTML = cloud
+      ? `Answers from ${esc(c.model)} via ${esc(m.cloud.label)}. <strong>${esc(sendsSentence(m.cloud.sends))}</strong>`
+      : `Answers from ${esc(c.model)} on this computer. Nothing you ask leaves it.`;
+  }
+  const sendsSentence = (sends) => sends.charAt(0).toUpperCase() + sends.slice(1) + " leave this computer each time you ask.";
+
+  /**
+   * Settings' Answering model section. Local lists the pinned models, each with why it cannot be
+   * used when it cannot. Cloud is reached only through a confirmation that says what leaves, and is
+   * stored only once a key is saved and a model is chosen, so a folder is never half on the cloud.
+   */
+  async function renderModelSection(confirming) {
+    const box = $("modelSection");
+    let m;
+    try { m = await api.modelSettings(); } catch (e) { box.innerHTML = `<p class="note">${esc(e.message)}</p>`; return; }
+    const c = m.choice, cloudView = Boolean(confirming) || c.where === "cloud";
+    const where = `<div class="setting"><span id="modelWhereLabel">Where answers come from</span>
+      <div class="segmented" role="group" aria-labelledby="modelWhereLabel" id="modelWhere">
+        <button type="button" class="quiet small" data-where="local" aria-pressed="${!cloudView}">On this computer</button>
+        <button type="button" class="quiet small" data-where="cloud" aria-pressed="${cloudView}">Cloud (${esc(m.cloud.label)})</button>
+      </div></div>`;
+    let pane;
+    if (!cloudView) {
+      pane = (m.local.length ? m.local.map((x) => `<div class="model-row"><span>${esc(x.name)}
+          <span class="cite">${x.research_recall != null ? `found ${x.research_recall}% of key facts on research questions, about ${x.median_seconds} s an answer · ` : ""}needs about ${Math.ceil(x.needs / 1e9)} GB of memory${x.ranked === false ? " · did not finish enough questions to be recommended" : ""}${x.why ? " · " + esc(x.why) : ""}</span></span>
+          ${x.name === c.model ? '<span class="cite">answering</span>'
+            : `<button type="button" class="quiet small" data-local="${esc(x.name)}"${x.why ? " disabled" : ""}>Use</button>`}</div>`).join("")
+        : '<p class="note">The model runtime is not answering, so the models on this computer cannot be listed.</p>') +
+        `<p class="note">Measured on twelve research questions over public agendas. The default is the one that found the most and fits this computer. Reading documents always uses the smallest model, on this computer.</p>`;
+    } else if (c.where !== "cloud" && confirming !== "confirmed") {
+      pane = `<div class="confirm-cloud"><strong>Answers in this folder would come from a model on ${esc(m.cloud.label)}'s servers.</strong>
+        <p>${esc(sendsSentence(m.cloud.sends))} ${esc(m.cloud.label)} passes them to the company that runs the model you choose.
+        Reading documents, the search index, the change record and source checks stay on this computer.
+        Other folders are not affected.</p>
+        <div class="actions"><button type="button" class="small" data-cloud="yes">Use the cloud for this folder</button>
+        <button type="button" class="quiet small" data-cloud="no">Keep answers on this computer</button></div></div>`;
+    } else if (!m.cloud.available) {
+      pane = `<p class="note">The cloud needs the desktop application, which keeps the key in this computer's keychain.</p>`;
+    } else {
+      pane = `<div class="keyrow">${m.cloud.keySaved
+          ? `<span>${esc(m.cloud.label)} key saved in this computer's keychain.</span>
+             <button type="button" class="plain" data-key="replace">Replace</button><button type="button" class="plain" data-key="forget">Remove</button>`
+          : `<label class="sr" for="cloudKey">${esc(m.cloud.label)} key</label>
+             <input type="password" id="cloudKey" autocomplete="off" placeholder="${esc(m.cloud.label)} key">
+             <button type="button" class="small" data-key="save">Save key</button>`}</div>
+        <div class="setting"><label for="zdrToggle">Only hosts that keep nothing (zero data retention)</label>
+          <button type="button" class="switch" id="zdrToggle" role="switch" aria-checked="${c.zdr !== false}"></button></div>
+        <p class="note">${esc(m.cloud.label)} and its hosts say this; it is their claim, not something this app can check.</p>
+        <div class="keyrow"><span>Model: <strong>${c.where === "cloud" ? esc(c.model) : "none chosen"}</strong></span>
+          <button type="button" class="quiet small" data-pick="1"${m.cloud.keySaved ? "" : " disabled"}>Choose a model</button></div>
+        <div id="cloudPicker"></div>`;
+    }
+    box.innerHTML = where + pane;
+    const zdrNow = () => $("zdrToggle") ? $("zdrToggle").getAttribute("aria-checked") !== "false" : true;
+    const set = async (choice) => {
+      try { await api.setModel(choice); } catch (e) { return say(e.message); }
+      renderModelSection();
+    };
+    box.onclick = async (e) => {
+      const t = e.target.closest("button");
+      if (!t) return;
+      if (t.dataset.where === "local" && c.where === "cloud") return set({ where: "local", model: m.local.find((x) => !x.why)?.name || c.model });
+      if (t.dataset.where === "local") return renderModelSection();
+      if (t.dataset.where === "cloud" && c.where !== "cloud") return renderModelSection("asking");
+      if (t.dataset.local) return set({ where: "local", model: t.dataset.local });
+      if (t.dataset.cloud === "no") return renderModelSection();
+      if (t.dataset.cloud === "yes") return renderModelSection("confirmed");
+      if (t.dataset.key === "save") {
+        try { await api.saveCloudKey($("cloudKey").value); } catch (err) { return say(err.message); }
+        $("cloudKey").value = "";
+        return renderModelSection(c.where === "cloud" ? undefined : "confirmed");
+      }
+      if (t.dataset.key === "forget" || t.dataset.key === "replace") {
+        await api.forgetCloudKey();
+        if (c.where === "cloud") await api.setModel({ where: "local", model: m.local.find((x) => !x.why)?.name || "gemma3:4b" }).catch(() => {});
+        return renderModelSection(t.dataset.key === "replace" ? "confirmed" : undefined);
+      }
+      if (t.id === "zdrToggle") {
+        const on = !zdrNow();
+        t.setAttribute("aria-checked", String(on));
+        if (c.where === "cloud") return set({ where: "cloud", model: c.model, zdr: on });
+        return;
+      }
+      if (t.dataset.pick) {
+        $("cloudPicker").innerHTML = '<span class="empty">asking OpenRouter for its list…</span>';
+        let list;
+        try { list = (await api.cloudModels()).models; } catch (err) { $("cloudPicker").innerHTML = `<p class="note">${esc(err.message)}</p>`; return; }
+        list.sort((a, b) => a.name.localeCompare(b.name));
+        $("cloudPicker").innerHTML = `<div class="keyrow"><label class="sr" for="cloudModel">Model</label>
+          <select id="cloudModel">${list.map((x) => `<option value="${esc(x.id)}"${x.id === (c.where === "cloud" ? c.model : m.cloud.suggested) ? " selected" : ""}>${esc(x.name)}${x.id === m.cloud.suggested ? " (suggested)" : ""} · $${x.prompt_per_million.toFixed(2)} in, $${x.completion_per_million.toFixed(2)} out per million tokens</option>`).join("")}</select>
+          <button type="button" class="small" data-use="1">Use this model</button></div>
+          <p class="note">Only models that return a structured answer are listed, since every answer is checked against its sources.
+            The suggested one kept the most sentences that hold, at a 99% kept share, when six were measured on public agendas.</p>`;
+        return;
+      }
+      if (t.dataset.use) return set({ where: "cloud", model: $("cloudModel").value, zdr: zdrNow() });
+    };
+  }
+
+  /** A change record, computed by code, as a message. */
+  async function addChange(id, name) {
+    const msg = append("<span class='empty'>reading…</span>");
+    const c = await api.change(id);
+    const open = (doc, page, passage, label) => doc && page
+      ? `<button type="button" class="citebtn" data-docpage="${doc}" data-pg="${page}" data-quote="${esc(passage)}">${esc(label || "")}${label ? ", " : ""}page ${page}</button>` : "";
+    const side = (cls, word, doc, page, passage, label, values) => passage
+      ? `<span class="${cls}"><span class="side">${word}</span>${open(doc, page, passage, label)}${markValues(passage, values)}</span>` : "";
+    const rows = c.changes.map((ch) => `
+      <div class="change">
+        <span class="kind">${esc(kindWord(ch))}</span> <strong>${esc(ch.label)}</strong>
+        ${ch.pairs.length && ch.kind !== "new_identifier" && ch.kind !== "recurrence"
+          ? `<div>${ch.pairs.map((p) => `${esc(p.then)} → ${esc(p.now)}`).join("; ")}</div>` : ""}
+        ${ch.then_passage && ch.now_passage
+          ? `<div class="compare">${side("then", "Earlier document", ch.then_document_id, ch.then_page, ch.then_passage, ch.then_document, ch.pairs.map((p) => p.then))}
+             ${side("now", "This document", ch.now_document_id, ch.now_page, ch.now_passage, ch.now_document, ch.pairs.map((p) => p.now))}</div>`
+          : side("now", "", ch.now_document_id, ch.now_page, ch.now_passage, ch.now_document, [])}
+      </div>`).join("");
+    // Coverage stays first and short; it becomes a warning only when a page went unread.
+    const cov = c.coverage, whole = cov.pages_read_by_model >= cov.pages_total && !cov.pages_unread.length;
+    msg.innerHTML =
+      `<h3 class="computed">Changes in ${esc(name)}</h3>` +
+      (whole
+        ? `<div class="cite">${cov.pages_read_by_model} of ${cov.pages_total} pages read · compared with ${c.compared_against} earlier document${c.compared_against === 1 ? "" : "s"}</div>`
+        : `<div class="coverage"><strong>Not every page was read.</strong> ${esc(cov.note)}</div>`) +
+      (rows || '<p class="empty">Nothing that code can check has changed.</p>') +
+      `<details class="explain"><summary>Comparison details</summary><div>Computed by code, not written by a model. ${esc(cov.note)}
+         Compared against ${c.compared_against} earlier document(s).</div></details>`;
+  }
+
+  /** A brief, assembled by code, as a message. */
+  async function addBrief(id, name) {
+    const msg = append("<span class='empty'>reading…</span>");
+    const b = await api.brief(id);
+    msg.innerHTML = `<div class="cite computed">Brief of ${esc(name)}. Assembled by code, not written by a model.</div>` +
+      `<div class="brief">${esc(b.text)}</div>`;
+  }
+
+  /** An empty conversation: what is new, questions to start from, saved conversations, and the privacy line. */
+  async function showEmptyThread() {
+    let w = { documents: [], changes: [], suggestions: [], since: null };
+    let saved = { saveAll: false, conversations: [] };
+    try { w = await api.whatsNew(); } catch { /* a record with nothing in it yet */ }
+    try { saved = await api.conversations(); } catch { /* the same */ }
+    ui.saveAll = saved.saveAll;
+    const newest = w.documents.find((d) => d.changes > 0) || w.documents[0];
+    const card = w.documents.length ? `
+      <div class="card">
+        <h2>${w.since ? "New since you last opened this folder" : "In this folder"}</h2>
+        <div>${w.documents.length} document${w.documents.length === 1 ? "" : "s"} ${w.since ? "added" : "in this folder's record"}.
+          Each is compared with the documents added before it.</div>
+        ${briefingHtml(w.changes)}
+        ${newest ? `<div class="actions after"><span class="latest">Latest: ${esc(newest.label)}</span>
+          <button type="button" class="quiet small" data-newest="${newest.id}" data-name="${esc(newest.label)}">View changes</button></div>` : ""}
+      </div>` : "";
+    const suggest = w.suggestions.length
+      ? `<div class="suggest">${w.suggestions.map((s) => `<button type="button" class="quiet small" data-suggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>` : "";
+    const list = saved.conversations.length ? `
+      <h2 class="sub">Saved conversations</h2>
+      ${saved.conversations.map((c) => `<div class="actions"><button type="button" class="quiet small" data-conv="${c.id}">${esc(c.title)}</button>
+        <span class="cite">${esc(c.started_at.slice(0, 10))}, ${c.turns} question${c.turns === 1 ? "" : "s"}</span></div>`).join("")}` : "";
+    const privacy = ui.saveAll
+      ? `<p class="note">Conversations in this folder are saved, in this folder's own record. <button type="button" class="plain" data-act="settings">Change this in Settings</button></p>`
+      : `<p class="note">Nothing you ask is saved: this conversation is gone when you quit. <button type="button" class="plain" data-act="settings">Change this in Settings</button></p>`;
+    $("thread").innerHTML = `<div class="empty-state">${card}<p class="note" id="readingNow"></p>${suggest}${list}${privacy}</div>`;
+    showReadingNow();
+    showSaveTools();
+  }
+
+  /**
+   * While documents are still being read, say what can already be asked. A new folder is when this
+   * matters most: a person opens it for Thursday's meeting and the packet is still reading.
+   */
+  function showReadingNow() {
+    const el = $("readingNow");
+    if (!el || !ui.folder) return;
+    const waiting = ui.folder.files.filter((x) => UNREAD.has(x.state)).length;
+    el.textContent = !waiting ? ""
+      : readCount() === 0
+        ? `${waiting === 1 ? "The first document is" : `${waiting} documents are`} being added. You can ask as soon as one is, usually within a minute.`
+        : `${waiting} document${waiting === 1 ? " is" : "s are"} still being processed. You can already ask about ` +
+          `${readCount() === 1 ? "the one" : `the ${readCount()}`} added so far; answers fill in as reading finishes.`;
+    el.hidden = !waiting;
+  }
+
+  function resetConversation() {
+    ui.turns = [];
+    ui.convId = null;
+    ui.saving = false;
+    $("savedNote").textContent = "";
+    closeSource();
+    showEmptyThread();
+  }
+
+  /** Saving: after each answer when this folder saves everything, or once this conversation was saved. */
+  async function keepIfSaving() {
+    if (!(ui.saving || ui.saveAll) || !ui.turns.length) return;
+    try {
+      ui.convId = (await api.saveConversation(ui.turns, ui.convId ?? undefined)).id;
+      ui.saving = true;
+      $("savedNote").textContent = "Saved in this folder";
+    } catch (e) {
+      $("savedNote").textContent = "Not saved: " + e.message;
+    }
+  }
+  /** The conversation header: its saving state in words, Save while it is not saved, New once it has begun. */
+  function showSaveTools() {
+    const saved = ui.saving || ui.saveAll;
+    $("saveConv").hidden = !ui.turns.length || saved;
+    $("newConv").hidden = !ui.turns.length;
+    if (!ui.turns.length) $("savedNote").textContent = "";
+    else if (!saved) $("savedNote").textContent = "Not saved";
+    else if (!/^Not saved:/.test($("savedNote").textContent)) $("savedNote").textContent = "Saved in this folder";
+  }
+
+  async function openConversation(cid) {
+    const c = await api.conversation(cid);
+    resetConversation();
+    $("thread").innerHTML = "";
+    ui.turns = c.turns;
+    ui.convId = c.id;
+    ui.saving = true;
+    for (const t of c.turns) {
+      $("thread").insertAdjacentHTML("beforeend", asked(t.question));
+      append(answerHtml(t.answer, t.answer.label || "the documents it was asked of"));
+    }
+    $("savedNote").textContent = "A saved conversation. New answers are saved to it.";
+    showSaveTools();
+  }
+
+  $("thread").addEventListener("click", (e) => {
+    const s = e.target.closest("[data-suggest]");
+    if (s) { $("q").value = s.dataset.suggest; return ask(new Event("submit")); }
+    const n = e.target.closest("[data-newest]");
+    if (n) return addChange(+n.dataset.newest, n.dataset.name);
+    const c = e.target.closest("[data-conv]");
+    if (c) return openConversation(+c.dataset.conv);
+    if (e.target.closest("[data-act=settings]")) return openSettings();
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // The source pane: the whole page a passage came from, the passage marked.
+
+  async function openSource(ref, quote, span, from) {
+    let p;
+    try {
+      p = await api.page(ref);
+    } catch (e) {
+      say(e.message);
+      return;
+    }
+    const text = p.text;
+    // A span marks a stretch by position (a check's closest text); a quote marks it by content.
+    const q = span && span.start >= 0 ? text.slice(span.start, span.end) : (quote || "").trim();
+    const at = span && span.start >= 0 ? span.start : q ? text.indexOf(q) : -1;
+    if (!span) $("sourceJudge").innerHTML = "";
+    // Say what this is: text taken from the file, not the file. The file itself is one click away.
+    const pdf = /\.pdf$/i.test(p.filename);
+    $("sourceTitle").textContent = `${docLabel(p.filename)}: text taken from page ${p.page_no}${pdf ? " of the PDF" : ""}`;
+    $("sourceOpen").hidden = !pdf;
+    $("sourceOpen").onclick = () => api.openDocument(p.document_id).catch((e) => say(e.message));
+    $("sourceText").innerHTML = at === -1 ? esc(text)
+      : esc(text.slice(0, at)) + `<mark id="sourceMark">${esc(q)}</mark>` + esc(text.slice(at + q.length));
+    // The answer column narrows when the source opens, which reflows everything above the sentence
+    // being checked; its citation is held at the same height so the reader does not lose their place.
+    const before = from ? from.getBoundingClientRect().top : null;
+    document.querySelectorAll("button.citebtn.active").forEach((b) => b.classList.remove("active"));
+    from?.classList.add("active");
+    $("source").hidden = false;
+    $("content").classList.add("with-source");
+    if (before !== null) document.scrollingElement.scrollBy(0, from.getBoundingClientRect().top - before);
+    scrollToMark();
+    $("sourceClose").focus({ preventScroll: true });
+  }
+  /** Scroll the pane, not the window (that would undo the held place), with the mark below any judgment. */
+  function scrollToMark() {
+    const m = $("sourceMark"), box = $("source");
+    if (!m) return;
+    if (getComputedStyle(box).position !== "sticky") return m.scrollIntoView({ block: "center" });
+    const judge = $("sourceJudge").offsetHeight + box.querySelector(".source-head").offsetHeight;
+    box.scrollTop = Math.max(0, m.offsetTop - judge - (box.clientHeight - judge) / 3);
+  }
+  function closeSource() {
+    $("sourceJudge").innerHTML = "";
+    document.querySelectorAll("button.citebtn.active").forEach((b) => b.classList.remove("active"));
+    $("source").hidden = true;
+    $("content").classList.remove("with-source");
+  }
+  $("sourceClose").addEventListener("click", closeSource);
+  $("mainCol").addEventListener("click", (e) => {
+    const c = e.target.closest("[data-page]");
+    if (c) openSource(c.dataset.page, c.dataset.quote, null, c);
+    const d = e.target.closest("[data-docpage]");
+    if (d) openSource({ document: +d.dataset.docpage, page: +d.dataset.pg }, d.dataset.quote, null, d);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Checks: the refusals and the marks for the whole record, and a count in the header.
+
+  function showChecks() {
+    // The badge counts only what waits for the person: refusals nobody has reviewed. Marks are a
+    // disclosure with their own count in the drawer; 42 of 67 on real agendas were harmless labels.
+    return Promise.all([showRefusals(), showMarks()]).then(([open]) => {
+      const n = open || 0;
+      $("checksCount").textContent = `${n} open`;
+      $("checksCount").hidden = n === 0;
+    });
+  }
+
+  /**
+   * The refusals, so a person can read them.
+   *
+   * A count on its own points nowhere: on this project's first long run, 28 of 30 refusals were the
+   * GATE's defect and not the model's, and the count looked identical either way. So the verdicts
+   * are listed separately with what each one accuses, the rate is withheld until somebody has read
+   * some, and every refusal carries two buttons because the judgment is a person's.
+   */
+  /** What each verdict means, for a person rather than for the locator. */
+  const PLAIN = {
+    absent: "The check could not find this quote on the page, word for word.",
+    recombined: "The quote joins two separate sentences as though they were one.",
+    ambiguous: "The quote is on the page more than once, so it points at no single place.",
+    too_short: "The quote is too short for a match to prove anything.",
+  };
+  const SHORT = { absent: "quote not found on the page", recombined: "two sentences joined", ambiguous: "quote appears more than once", too_short: "quote too short" };
+  const judgeable = (r) => !r.reviewed_verdict && r.quote && (r.verdict === "absent" || r.verdict === "recombined");
+
+  /**
+   * One check, judged beside its page: the source pane opens on the page where the quote comes
+   * closest, that stretch marked, and above it what the check decided and the question the person
+   * can answer. "It is on the page" records that the check was wrong; "It is not on the page" that it
+   * was right; "Not sure" records nothing and moves on.
+   */
+  async function openCheck(refId) {
+    const r = (ui.refusals || []).find((x) => x.id === refId);
+    if (!r) return;
+    let src;
+    try { src = await api.refusalSource(refId); } catch (e) { return say(e.message); }
+    await openSource({ document: src.document_id, page: src.page_no }, null, { start: src.start, end: src.end });
+    const ask = judgeable(r);
+    $("sourceJudge").innerHTML = `<div class="judge-block">
+      <span class="kind">What was stated</span><div>${esc(r.claim_text)}</div>
+      <span class="kind">The quote given for it</span><div class="q">${esc(r.quote)}</div>
+      <span class="kind">What the check decided</span><div>${esc(PLAIN[r.verdict] || r.reason)}
+        ${src.start >= 0 ? " The closest text on this page is marked below." : ""}</div>
+      ${ask ? `<span class="kind">Your judgment</span><div>Does this quote appear on page ${src.page_no}?</div>
+      <div class="judge">
+        <button type="button" class="quiet small" data-judge="wrong">It is on the page</button>
+        <button type="button" class="quiet small" data-judge="right">It is not on the page</button>
+        <button type="button" class="plain" data-judge="skip">Not sure</button>
+      </div>` : r.reviewed_verdict ? `<span class="kind">Your judgment</span><div>${r.reviewed_verdict === "wrong" ? "It is on the page." : "It is not on the page."}</div>` : ""}
+      <details class="explain"><summary>Details</summary><div>${esc(r.verdict)} · reading window ${r.window_no} · ${esc(r.reason)}</div></details>
+    </div>`;
+    scrollToMark();
+    $("sourceJudge").querySelectorAll("[data-judge]").forEach((b) => b.addEventListener("click", async () => {
+      if (b.dataset.judge !== "skip") await api.review(refId, b.dataset.judge, "");
+      await showChecks();
+      const next = (ui.refusals || []).find((x) => judgeable(x) && x.id !== refId);
+      if (next) openCheck(next.id); else closeSource();
+    }));
+  }
+
+  async function showRefusals() {
+    let data;
+    try {
+      data = await api.refusals();
+    } catch {
+      return 0;
+    }
+    const s = data.summary;
+    const refs = data.refusals || [];
+    ui.refusals = refs;
+    // A check a person can judge is a statement set aside because its quote was not found; the other
+    // verdicts are mechanical (a quote too short, or on the page twice) or a reading failure, and are
+    // listed with their reason and nothing to decide.
+    const list = refs.map((r) => {
+      const short = (r.claim_text || "").length > 90 ? r.claim_text.slice(0, 88) + "…" : r.claim_text;
+      if (!r.quote) return `<p class="note">${esc(PLAIN[r.verdict] || `Part of ${(ui.docs[r.document_id] || {}).label || "a document"} could not be read, so nothing from it could be checked.`)}</p>`;
+      return `<button type="button" class="ref-row${r.reviewed_verdict ? " judged" : ""}" data-open-ref="${r.id}">${esc(short || r.quote.slice(0, 88))}
+        <span class="cite">${r.reviewed_verdict ? `Judged: ${r.reviewed_verdict === "wrong" ? "it is on the page" : "it is not on the page"}` : esc(SHORT[r.verdict] || r.verdict)}</span></button>`;
+    }).join("");
+
+    $("refusals").innerHTML = (refs.length
+      ? `<div class="ratebox"><strong>${esc(s.says)}</strong></div>
+         <details class="explain"><summary>How these checks work</summary>
+           <div>${esc(s.rate)}</div>
+           <div class="verdicts">${(s.by_verdict || []).map((v) =>
+             `<div><strong>${esc(v.verdict)}: ${v.n}</strong>, pointing at ${esc(v.points_at)}</div>`).join("")}</div>
+         </details>` + list
+      : `<p class="empty">Nothing refused. When the model claims something no quote in the document supports,
+          the gate refuses it and it is listed here for you to judge.</p>`);
+
+    $("refusals").querySelectorAll("[data-open-ref]").forEach((b) => b.addEventListener("click", () => openCheck(Number(b.dataset.openRef))));
+    return refs.filter(judgeable).length;
+  }
+
+  /**
+   * Invariant 9's marks: text in the packet that reads as an instruction to a machine, and text a
+   * reader would not see.
+   *
+   * This panel is the whole point of the invariant. The marks change NOTHING about what the record
+   * retrieves or how it ranks; they exist so the reader can see that the organisation put something in the
+   * file addressed to the software rather than to the board. Every panel here says what it cannot
+   * do, and this one says the most, because a screen that reads as a guarantee is worse than none.
+   */
+  async function showMarks() {
+    let data;
+    try {
+      data = await api.marks();
+    } catch {
+      return 0;
+    }
+    const marks = data.marks || [];
+    const rows = marks.map((m) => `
+      <div class="ref">
+        <div class="what">${esc(m.kind === "hidden" ? "not visible to a reader" : "reads as an instruction")}
+          ${m.also_hidden ? "<strong>and is hidden from a reader</strong>" : ""}
+          &middot; page ${m.page_no} &middot; ${esc(m.reason)}${m.detail ? " &middot; " + esc(m.detail) : ""}</div>
+        <span class="q">${esc(m.text)}</span>
+        <div class="what">${m.reached_the_record
+          ? "This text IS in the page text the record holds."
+          : "This text did not reach the page text, so nothing here has read it."}
+          ${m.kind === "instruction" ? "Matched by: " + esc(m.rule) + "." : ""}</div>
+      </div>`).join("");
+
+    $("marks").innerHTML = (marks.length
+      ? `<div class="ratebox"><strong>${marks.length + (marks.length === 1 ? " passage" : " passages")} marked.</strong></div>`
+      : `<p class="empty">Nothing marked. Text in a document that reads as an instruction to software, or that a
+          reader would not see, is listed here.</p>`) +
+      `<details class="explain"><summary>What a mark does and does not do</summary>
+        <div>A mark changes nothing. Every marked passage is still in the record, still searchable,
+        and ranked exactly as it was. This is a disclosure, not a defence: the patterns are English
+        only, their recall on real packets is unmeasured, and the reading model sees a document
+        before any of this runs.</div></details>` + rows;
+    return marks.length;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Reading, at the top of the drawer.
+
+  /**
+   * A run says what it is doing while it does it, and what happened when it stopped.
+   *
+   * The three states are kept apart on purpose: running, not moving, and stopped without finishing.
+   * A page that only showed a spinner would make all three look the same, which is the thing this
+   * whole section exists to prevent.
+   */
+  async function showRuns() {
+    let runs = [];
+    try {
+      runs = (await api.runs()).runs || [];
+    } catch {
+      return;
+    }
+    const worth = runs.filter((r) => r.state !== "finished");
+    $("runs").innerHTML = worth.map((r) => `
+      <div class="run ${esc(r.state)}">
+        <div class="head">${r.state === "running" ? '<span class="pulse"></span>' : ""}${esc(r.filename)} · started ${esc((r.started_at || "").replace("T", " ").slice(0, 19))}</div>
+        <div class="bar"><span style="width:${Math.max(2, r.percent)}%"></span></div>
+        <div>${esc(r.says)}</div>
+      </div>`).join("");
+    const live = worth.some((r) => r.state === "running" || r.state === "not_moving");
+    // When a reading settles the document list and its counts change, so read them again.
+    if (showRuns.live && !live) state();
+    else if ($("firstRun").hidden) showFolder();
+    showRuns.live = live;
+    clearTimeout(showRuns.timer);
+    showRuns.timer = setTimeout(showRuns, live ? 3000 : 20000);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Settings: its own window (the same page at #settings), from the switcher, the app menu with
+  // Cmd-comma, and the privacy line in an empty conversation.
+
+  async function openSettings() {
+    try {
+      await api.openSettings();
+    } catch {
+      // A browser has no second window: show Settings in this page instead.
+      location.hash = "settings";
+      location.reload();
+    }
+  }
+
+  /** A check's answer, in words, with the release's notes and page when there is something newer. */
+  const updateBlock = (r) => `
+    <div class="sentence ${r.state === "newer" ? "kept" : ""}"><div>${esc(r.says)}</div>
+      ${r.published ? `<div class="cite">published ${esc(r.published)}</div>` : ""}
+      ${r.state === "newer" && r.notes ? `<div class="brief">${esc(r.notes)}</div>` : ""}
+      ${r.state === "newer" && r.page ? `<div class="cite">${esc(r.page)}</div>` : ""}</div>`;
+
+  async function checkUpdates() {
+    $("updateResult").innerHTML = "<span class='empty'>asking GitHub…</span>";
+    try {
+      $("updateResult").innerHTML = updateBlock(await api.checkForUpdates());
+    } catch (e) {
+      $("updateResult").innerHTML = `<div class="sentence dropped"><div class="why">${esc(e.message)}</div></div>`;
+    }
+  }
+
+  const launchLabel = (on) => $("launchToggle").setAttribute("aria-checked", String(on));
+
+  async function showLaunchSetting() {
+    try {
+      launchLabel((await api.updateSettings()).checkAtLaunch);
+    } catch (e) {
+      $("updateResult").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+    }
+  }
+
+  async function toggleLaunchCheck() {
+    const on = $("launchToggle").getAttribute("aria-checked") !== "true";
+    try {
+      launchLabel((await api.updateSettings(on)).checkAtLaunch);
+    } catch (e) {
+      $("updateResult").innerHTML = `<div class="note">${esc(e.message)}</div>`;
+    }
+  }
+
+  /** The launch check's result, shown in the header only when it found something newer. */
+  async function showLaunchResult() {
+    let s;
+    try {
+      s = await api.updateSettings();
+    } catch {
+      return; // a browser has no shell profile, so there is no launch check to report
+    }
+    if (s.atLaunch && s.atLaunch.state === "newer") {
+      $("updateNote").textContent = `Version ${s.atLaunch.latest} is available`;
+      $("updateNote").hidden = false;
+    }
+  }
+
+  const saveAllLabel = (on) => $("saveAllToggle").setAttribute("aria-checked", String(on));
+
+  /**
+   * Settings, in its own window: this folder (saving conversations, the saved ones, where the
+   * record is kept) and the app (version and updates). Facts the code already computes, and the
+   * few switches that belong to the person.
+   */
+  async function renderSettings(s) {
+    document.title = "Settings";
+    $("firstRun").hidden = $("app").hidden = true;
+    $("where").hidden = $("settingsBtn").hidden = true;
+    $("settingsView").hidden = false;
+    const view = $("settingsView");
+    if (s.ok === false) {
+      view.innerHTML = `<h2>Settings</h2><p class="empty">No folder is open.</p>` + appSection("");
+      return wireApp();
+    }
+    view.innerHTML = "<span class='empty'>reading…</span>";
+    const [a, saved] = await Promise.all([api.about(), api.conversations()]);
+    const rt = a.runtime;
+    view.innerHTML = `
+      <h2>This folder</h2>
+      <div class="facts"><div class="path"><span class="what">folder</span> <span title="${esc(s.dir)}">${esc(tilde(s.dir))}</span>
+        <button type="button" class="plain" id="openFolder">Show in Finder</button></div></div>
+      <div class="setting">
+        <label for="saveAllToggle">Automatically save conversations</label>
+        <button type="button" class="switch" id="saveAllToggle" role="switch" aria-checked="false"></button>
+      </div>
+      <p class="note">Off: nothing you ask is saved, and a conversation is gone when you quit, unless you press
+        "Save". On: every conversation in this folder is saved, in this folder's own
+        record and nowhere else. A deleted conversation is removed from the record and the file is
+        compacted; a backup or snapshot of this computer taken before then is out of this app's reach.</p>
+      <h2 class="sub">Answering model</h2>
+      <div id="modelSection"><span class="empty">reading…</span></div>
+      <h2 class="sub">Saved conversations</h2>
+      <div id="savedList">${saved.conversations.length ? saved.conversations.map((c) => `
+        <div class="actions"><span>${esc(c.title)}</span><span class="cite">${esc(c.started_at.slice(0, 10))}, ${c.turns} question${c.turns === 1 ? "" : "s"}</span>
+          <button type="button" class="quiet small" data-del="${c.id}" aria-label="Delete ${esc(c.title)}">Delete</button></div>`).join("")
+        : '<p class="empty">None saved in this folder.</p>'}</div>
+      <details class="explain"><summary>Where the record is kept, and what was checked</summary>
+        <div class="facts">
+          <div><span class="what">record's data</span> <span title="${esc(a.dir)}">${esc(tilde(a.dir))}</span></div>
+          <div><span class="what">confirmed</span> ${esc((a.confirmed.confirmed_at || "").replace("T", " ").slice(0, 19))} by ${esc(a.confirmed.confirmed_by)}</div>
+          <div><span class="what">model runtime</span> ${esc(rt.detail)}, on this computer only</div>
+          <div><span class="what">general model</span> ${esc(a.model)}, the smallest pinned model; which model a task uses is the gate's decision, not a setting</div>
+          ${a.models
+            ? a.models.map((m) => `<div><span class="what">${esc(m.name)}</span> ${(m.size / 1e9).toFixed(2)} GB, ${esc(m.state)}</div>`).join("")
+            : `<div><span class="what">pinned models</span> not checked: the runtime is not answering</div>`}
+        </div>
+        <div class="coverage">${verdictBlock(a.verdict)}</div>
+        <div class="note">Checked here: nothing but the download module may reach the network, and the
+          model runs on this computer only, both refused when the application is built. <strong>Not yet run:
+          the egress test</strong>, which is what would show that nothing leaves while you ask.</div>
+      </details>
+      <div class="actions after">
+        <button type="button" class="quiet" id="openAnother">Open another folder</button>
+        <button type="button" class="quiet" id="forgetThis">Remove from recent folders</button>
+      </div>` + appSection(a.version);
+    saveAllLabel(saved.saveAll);
+    $("saveAllToggle").addEventListener("click", async () => {
+      const on = $("saveAllToggle").getAttribute("aria-checked") !== "true";
+      saveAllLabel((await api.saveAll(on)).saveAll);
+    });
+    // Deleting compacts the file, so there is no Undo: it asks first, in place, and Cancel is focused.
+    $("savedList").addEventListener("click", async (e) => {
+      const d = e.target.closest("[data-del]"), yes = e.target.closest("[data-del-yes]"), no = e.target.closest("[data-del-no]");
+      if (d) {
+        d.outerHTML = `<span class="confirm"><span class="ask">Delete for good? It cannot be recovered.</span>
+          <button type="button" class="small" data-del-yes="${d.dataset.del}">Delete</button>
+          <button type="button" class="quiet small" data-del-no>Cancel</button></span>`;
+        return $("savedList").querySelector("[data-del-no]").focus();
+      }
+      if (yes) await api.deleteConversation(+yes.dataset.delYes);
+      if (yes || no) renderSettings(await api.state());
+    });
+    renderModelSection();
+    $("openAnother").addEventListener("click", choose);
+    $("openFolder").addEventListener("click", () => api.openFolder().catch((e) => {
+      $("openFolder").outerHTML = `<span class="note">${esc(e.message)}</span>`;
+    }));
+    $("forgetThis").addEventListener("click", async () => {
+      try { await api.forgetFolder(s.dir); } catch (e) { say(e.message); }
+      renderSettings(await api.state());
+    });
+    wireApp();
+  }
+
+  const appSection = (version) => `
+    <h2 class="sub">The app</h2>
+    <div class="setting">
+      <span id="appearanceLabel">Appearance</span>
+      <div class="segmented" role="group" aria-labelledby="appearanceLabel" id="appearance">
+      <button type="button" class="quiet small" data-appearance="system" aria-pressed="false">Match the Mac</button>
+      <button type="button" class="quiet small" data-appearance="light" aria-pressed="false">Light</button>
+      <button type="button" class="quiet small" data-appearance="dark" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+    <div class="facts"><div><span class="what">version</span> ${esc(version || "unknown")}</div></div>
+    <div class="setting">
+      <label for="launchToggle">Check for updates when the app opens</label>
+      <button type="button" class="switch" id="launchToggle" role="switch" aria-checked="false"></button>
+    </div>
+    <div class="actions after">
+      <button type="button" class="quiet" id="checkUpdates">Check for updates</button>
+    </div>
+    <div id="updateResult"></div>
+    <div class="note">A check asks GitHub for the latest published release of this app. It sends nothing
+      about you: no version, no identifier and nothing from your record. GitHub sees this computer's
+      address and a fixed name for the app, as with any web request. Nothing is ever downloaded
+      by a check.</div>`;
+  /** Light, dark, or the Mac's own; the shell applies it to every window at once. */
+  async function showAppearance(pick) {
+    let a;
+    try {
+      a = (await api.appearance(pick)).appearance;
+    } catch {
+      $("appearance").className = "";
+      $("appearance").innerHTML = '<span class="note">A browser follows its own appearance.</span>';
+      return;
+    }
+    for (const b of $("appearance").querySelectorAll("[data-appearance]")) {
+      b.setAttribute("aria-pressed", String(b.dataset.appearance === a));
+    }
+  }
+  function wireApp() {
+    $("appearance").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-appearance]");
+      if (b) showAppearance(b.dataset.appearance);
+    });
+    showAppearance();
+    $("checkUpdates").addEventListener("click", checkUpdates);
+    $("launchToggle").addEventListener("click", toggleLaunchCheck);
+    showLaunchSetting();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Popovers, keys and the menu bar.
+
+  function closePops() {
+    for (const id of ["viewPop", "rowMenu", "folderMenu"]) $(id).hidden = true;
+    for (const id of ["viewBtn", "where"]) $(id).setAttribute("aria-expanded", "false");
+  }
+  function togglePop(btn, pop) {
+    const open = $(pop).hidden;
+    closePops();
+    $(pop).hidden = !open;
+    $(btn).setAttribute("aria-expanded", String(open));
+  }
+  $("where").addEventListener("click", (e) => { e.stopPropagation(); openFolderMenu(); });
+  $("viewBtn").addEventListener("click", (e) => { e.stopPropagation(); togglePop("viewBtn", "viewPop"); });
+  $("showPills").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-show]");
+    if (!b) return;
+    ui.view.show = b.dataset.show;
+    for (const o of $("showPills").querySelectorAll("[data-show]")) o.setAttribute("aria-pressed", String(o === b));
+    renderList();
+  });
+  for (const [id, key] of [["groupBy", "group"], ["sortBy", "sort"]]) {
+    $(id).addEventListener("change", () => { ui.view[key] = $(id).value; renderList(); });
+  }
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".pop") && !e.target.closest("button.row") && e.target.id !== "where") closePops();
+  });
+  $("docsBtn").addEventListener("click", () => toggleDrawer("docs"));
+  $("checksBtn").addEventListener("click", () => toggleDrawer("checks"));
+  // Settings is its own window; coming back to this one picks up a change of model made there.
+  window.addEventListener("focus", () => { if (!SETTINGS && ui.folder) showModelNote(); });
+  /**
+   * A divider drags its pane's width, clamped, and double-click resets it. The width is a per-person
+   * convenience kept in browser storage, which can be missing or refuse (a private window), so every
+   * read and write is guarded and the page lays out the same without it.
+   */
+  function divider(id, prop, key, min, max, fromRight) {
+    const el = $(id);
+    const store = { get() { try { return localStorage.getItem(key); } catch { return null; } },
+      set(v) { try { v == null ? localStorage.removeItem(key) : localStorage.setItem(key, v); } catch { /* not kept */ } } };
+    const apply = (w) => document.documentElement.style.setProperty(prop, w + "px");
+    const saved = Number(store.get());
+    if (saved) apply(saved);
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      el.classList.add("dragging");
+      const move = (m) => {
+        const w = fromRight ? window.innerWidth - m.clientX - 28 : m.clientX;
+        apply(Math.max(min, Math.min(max, Math.round(w))));
+      };
+      const up = () => {
+        el.classList.remove("dragging");
+        el.removeEventListener("pointermove", move);
+        store.set(parseInt(getComputedStyle(document.documentElement).getPropertyValue(prop)) || null);
+      };
+      el.addEventListener("pointermove", move);
+      el.addEventListener("pointerup", up, { once: true });
+    });
+    el.addEventListener("dblclick", () => { document.documentElement.style.removeProperty(prop); store.set(null); });
+  }
+  divider("sideDivider", "--side-w", "bd.side-w", 220, 560, false);
+  divider("sourceDivider", "--source-w", "bd.source-w", 320, 900, true);
+  $("sideSwitch").addEventListener("click", (e) => { const b = e.target.closest("[data-pane]"); if (b) showPane(b.dataset.pane); });
+
+  // One handler per command, whichever way it arrives: a key, the menu bar, or a control.
+  const selectedFile = () => (ui.folder && ui.sel ? ui.folder.files.find((f) => f.name === ui.sel) || null : null);
+  const COMMANDS = {
+    refresh: () => state(),
+    "leave-out": () => { const f = selectedFile(); if (f && f.state !== "left out") leaveOutFile(f.name); },
+    "include-again": () => { const f = selectedFile(); if (f && f.state === "left out") includeFile(f.name); },
+    "show-in-finder": () => { const f = selectedFile(); if (f) showInFinder(f.name); },
+  };
+  window.menu?.on((command) => COMMANDS[command]?.());
+  document.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === ",") { e.preventDefault(); return openSettings(); }
+    const typing = e.target.closest("input, select, textarea");
+    if (mod && e.key.toLowerCase() === "z" && !e.shiftKey && ui.undo && !typing) { e.preventDefault(); return undo(); }
+    if (e.key === "Escape") {
+      if (!$("rowMenu").hidden || !$("viewPop").hidden || !$("folderMenu").hidden) return closePops();
+      if (!$("source").hidden) return closeSource();
+    }
+  });
+
+  $("askForm").addEventListener("submit", ask);
+  // Implicit form submission did not fire when the question was typed and Return pressed, which is
+  // how anybody actually asks a question. Found by driving the page rather than by reading it.
+  // Return asks; Shift and Return is a new line; a key that finishes composing a character is not a send.
+  $("q").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) ask(e); });
+  $("q").addEventListener("input", fitQuestion);
+  $("searchBtn").addEventListener("click", searchOnly);
+  $("chooseBtn").addEventListener("click", choose);
+  $("updateNote").addEventListener("click", openSettings);
+  $("settingsBtn").addEventListener("click", openSettings);
+  $("newConv").addEventListener("click", resetConversation);
+  $("saveConv").addEventListener("click", async () => { ui.saving = true; await keepIfSaving(); showSaveTools(); });
+  state();
+</script>
