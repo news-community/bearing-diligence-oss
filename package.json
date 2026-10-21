@@ -48,7 +48,7 @@
   "build": {
     "appId": "news.communities.bearing-diligence",
     "productName": "Bearing Diligence",
-    "copyright": "Copyright 2026 Communities News LLC",
+    "copyright": "Copyright 2026 Communities News, Inc.",
     "directories": {
       "output": "release",
       "buildResources": "build"
