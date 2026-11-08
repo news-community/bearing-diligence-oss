@@ -35,3 +35,6 @@ __pycache__/
 .env
 .env.*
 /release/
+
+# Claude Code agent worktrees (each holds its own .git)
+.claude/worktrees/
